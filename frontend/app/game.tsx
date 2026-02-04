@@ -452,16 +452,6 @@ export default function GameScreen() {
             <Text style={styles.teamLabelV} numberOfLines={1}>{game.team_vertical}</Text>
           </View>
         </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-        </ScrollView>
 
         {/* Players List */}
         <View style={styles.playersSection}>
