@@ -737,18 +737,15 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
   },
-  gridScroll: {
-    paddingBottom: 8,
-  },
   gridWrapper: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   topLabelRow: {
     flexDirection: 'row',
     marginBottom: 4,
   },
   teamLabelContainer: {
-    width: CELL_SIZE * 10,
     alignItems: 'center',
   },
   teamLabelH: {
@@ -772,27 +769,17 @@ const styles = StyleSheet.create({
   numberText: {
     color: '#4CAF50',
     fontWeight: 'bold',
-    fontSize: 12,
+    fontSize: 11,
   },
-  gridBody: {
-    flexDirection: 'row',
-  },
-  leftLabelContainer: {
-    width: LABEL_SIZE,
-    height: CELL_SIZE * 10,
-    justifyContent: 'center',
+  bottomLabelRow: {
+    marginTop: 8,
     alignItems: 'center',
+    width: '100%',
   },
   teamLabelV: {
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
-    transform: [{ rotate: '-90deg' }],
-    width: CELL_SIZE * 10,
-    textAlign: 'center',
-  },
-  gridMain: {
-    flexDirection: 'column',
   },
   gridRow: {
     flexDirection: 'row',
