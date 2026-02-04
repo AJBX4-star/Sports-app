@@ -1207,6 +1207,162 @@ export default function GameScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Score Update Modal */}
+      <Modal
+        visible={showScoreModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowScoreModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Update Live Score</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{game.team_horizontal} Score</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={liveScoreH}
+                onChangeText={setLiveScoreH}
+                placeholder="0"
+                placeholderTextColor="#666"
+                keyboardType="number-pad"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{game.team_vertical} Score</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={liveScoreV}
+                onChangeText={setLiveScoreV}
+                placeholder="0"
+                placeholderTextColor="#666"
+                keyboardType="number-pad"
+              />
+            </View>
+
+            <TouchableOpacity style={styles.saveButton} onPress={updateLiveScore}>
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.saveButtonText}>Update Score</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowScoreModal(false)}
+            >
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Player Modal */}
+      <Modal
+        visible={showAddPlayer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddPlayer(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add Player</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Player Name</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={newPlayerName}
+                onChangeText={setNewPlayerName}
+                placeholder="Enter player name"
+                placeholderTextColor="#666"
+              />
+            </View>
+
+            <TouchableOpacity style={styles.saveButton} onPress={addPlayer}>
+              <Ionicons name="person-add" size={20} color="#fff" />
+              <Text style={styles.saveButtonText}>Add Player</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowAddPlayer(false)}
+            >
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Remove Player Modal */}
+      <Modal
+        visible={showRemovePlayer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRemovePlayer(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Remove Player</Text>
+            <Text style={styles.modalSubtitle}>Select a player to remove</Text>
+
+            <ScrollView style={styles.playerRemoveList}>
+              {game.players.filter(p => p !== game.host_name).map((player) => (
+                <TouchableOpacity
+                  key={player}
+                  style={[
+                    styles.playerRemoveItem,
+                    playerToRemove === player && styles.playerRemoveItemSelected,
+                  ]}
+                  onPress={() => setPlayerToRemove(player)}
+                >
+                  <Ionicons 
+                    name={playerToRemove === player ? 'checkmark-circle' : 'ellipse-outline'} 
+                    size={20} 
+                    color={playerToRemove === player ? '#4CAF50' : '#666'} 
+                  />
+                  <Text style={styles.playerRemoveName}>{player}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {playerToRemove && (
+              <TouchableOpacity
+                style={styles.releaseSquaresOption}
+                onPress={() => setReleaseSquares(!releaseSquares)}
+              >
+                <Ionicons 
+                  name={releaseSquares ? 'checkbox' : 'square-outline'} 
+                  size={22} 
+                  color={releaseSquares ? '#4CAF50' : '#888'} 
+                />
+                <Text style={styles.releaseSquaresText}>Release their claimed squares</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity 
+              style={[styles.saveButton, styles.removeButton, !playerToRemove && styles.disabledButton]} 
+              onPress={removePlayer}
+              disabled={!playerToRemove}
+            >
+              <Ionicons name="person-remove" size={20} color="#fff" />
+              <Text style={styles.saveButtonText}>Remove Player</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                setShowRemovePlayer(false);
+                setPlayerToRemove('');
+                setReleaseSquares(false);
+              }}
+            >
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
