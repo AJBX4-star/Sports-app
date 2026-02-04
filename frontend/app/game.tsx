@@ -112,6 +112,19 @@ export default function GameScreen() {
     if (code) {
       fetchGame();
       connectSocket();
+      
+      // Polling fallback for real-time updates
+      // This ensures all players see updates even if WebSocket fails
+      const pollInterval = setInterval(() => {
+        fetchGameSilent();
+      }, 3000); // Poll every 3 seconds
+      
+      return () => {
+        clearInterval(pollInterval);
+        if (socket) {
+          socket.disconnect();
+        }
+      };
     }
     return () => {
       if (socket) {
@@ -131,6 +144,20 @@ export default function GameScreen() {
       }
     } catch (error) {
       console.error('Error loading game info:', error);
+    }
+  };
+
+  // Silent fetch for polling - doesn't show loading state
+  const fetchGameSilent = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}`);
+      if (response.ok) {
+        const data = await response.json();
+        setGame(data);
+      }
+    } catch (error) {
+      // Silent fail for polling
+      console.log('Poll fetch error:', error);
     }
   };
 
