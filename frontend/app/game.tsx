@@ -2073,6 +2073,9 @@ const styles = StyleSheet.create({
   undoButton: {
     backgroundColor: '#FF9800',
   },
+  skipButton: {
+    backgroundColor: '#9C27B0',
+  },
   scoreButton: {
     backgroundColor: '#2196F3',
   },
