@@ -67,8 +67,8 @@ interface GameInfo {
 }
 
 // Cell size calculation - ensure grid fits on screen
-const CELL_SIZE = 30; // Fixed size that fits 10 + label
-const LABEL_SIZE = 28;
+const CELL_SIZE = 32; // Fixed size that fits 10 + label on most phones
+const LABEL_SIZE = 32;
 
 export default function GameScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
