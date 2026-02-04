@@ -227,7 +227,8 @@ export default function GameScreen() {
 
   const openWinnerSelection = (quarter: number) => {
     if (!game || !game.numbers_randomized) {
-      Alert.alert('Numbers Not Set', 'Please randomize numbers first');
+      // On web, Alert.alert might not work well, so log and show in UI
+      console.log('Numbers not randomized yet');
       return;
     }
     setSelectedQuarter(quarter);
@@ -255,12 +256,16 @@ export default function GameScreen() {
           body: JSON.stringify({ quarter: selectedQuarter, position }),
         });
         if (!response.ok) throw new Error('Failed to set winner');
+        
+        // Update local state with response
+        const data = await response.json();
+        setGame({...data});
         setShowWinnerInput(false);
       } catch (error) {
-        Alert.alert('Error', 'Failed to set winner');
+        console.error('Failed to set winner:', error);
       }
     } else {
-      Alert.alert('Error', 'Invalid scores');
+      console.error('Invalid scores - number not found in grid');
     }
   };
 
