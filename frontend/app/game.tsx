@@ -209,26 +209,20 @@ export default function GameScreen() {
   const randomizeNumbers = async () => {
     if (!game) return;
     
-    Alert.alert(
-      'Randomize Numbers',
-      'This will randomly assign numbers 0-9 to both axes. This cannot be undone!',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Randomize',
-          onPress: async () => {
-            try {
-              const response = await fetch(`${BACKEND_URL}/api/games/${code}/randomize`, {
-                method: 'POST',
-              });
-              if (!response.ok) throw new Error('Failed to randomize');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to randomize numbers');
-            }
-          },
-        },
-      ]
-    );
+    // On web, Alert.alert with buttons doesn't work, so just execute directly
+    // The confirmation is built into the button UI showing "Randomize Numbers"
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/randomize`, {
+        method: 'POST',
+      });
+      if (!response.ok) throw new Error('Failed to randomize');
+      
+      // Update local state with response
+      const data = await response.json();
+      setGame({...data});
+    } catch (error) {
+      console.error('Failed to randomize numbers:', error);
+    }
   };
 
   const openWinnerSelection = (quarter: number) => {
