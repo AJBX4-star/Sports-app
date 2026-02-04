@@ -349,16 +349,56 @@ async def host_claim_square(code: str, request: HostClaimRequest):
             'locked': True
         }
     
+    # Handle turn progression - count towards player's picks
+    picks_per_turn = game.get('picks_per_turn', 1)
+    picks_this_turn = game.get('picks_this_turn', 0) + 1
+    current_turn = game.get('current_turn', 0)
+    draft_direction = game.get('draft_direction', 1)
+    draft_style = game.get('draft_style', 'snake')
+    player_order = game.get('player_order', game.get('players', []))
+    
+    # Check if player has made all their picks for this turn
+    if picks_this_turn >= picks_per_turn:
+        picks_this_turn = 0
+        
+        if draft_style == 'snake':
+            # Snake draft logic
+            next_turn = current_turn + draft_direction
+            # Check if we need to reverse direction
+            if next_turn >= len(player_order):
+                draft_direction = -1
+                next_turn = len(player_order) - 1
+            elif next_turn < 0:
+                draft_direction = 1
+                next_turn = 0
+            current_turn = next_turn
+        else:
+            # Standard draft - just cycle through
+            current_turn = (current_turn + 1) % len(player_order) if player_order else 0
+    
     # Check if all squares are claimed
     claimed_count = sum(1 for s in squares if s.get('claimed', False))
     board_locked = claimed_count >= 100
+    
+    # Store last claim for undo functionality
+    last_claim = {
+        'position': request.position,
+        'player_name': request.player_name,
+        'previous_turn': game.get('current_turn', 0),
+        'previous_picks': game.get('picks_this_turn', 0),
+        'previous_direction': game.get('draft_direction', 1)
+    }
     
     await db.games.update_one(
         {"code": code.upper()},
         {
             "$set": {
                 "squares": squares,
-                "board_locked": board_locked
+                "current_turn": current_turn,
+                "picks_this_turn": picks_this_turn,
+                "draft_direction": draft_direction,
+                "board_locked": board_locked,
+                "last_claim": last_claim
             }
         }
     )
@@ -371,6 +411,8 @@ async def host_claim_square(code: str, request: HostClaimRequest):
         'position': request.position,
         'player_name': request.player_name,
         'squares': updated_game.get('squares', []),
+        'current_turn': current_turn,
+        'picks_this_turn': picks_this_turn,
         'board_locked': board_locked
     }, room=code.upper())
     
