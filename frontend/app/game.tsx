@@ -761,6 +761,7 @@ export default function GameScreen() {
                 const square = game.squares[position];
                 const winningQuarters = getWinningQuarters(position);
                 const squareNumber = position + 1;
+                const isLiveWinner = isCurrentWinningSquare(position);
                 return (
                   <TouchableOpacity
                     key={`cell-${position}`}
@@ -772,6 +773,7 @@ export default function GameScreen() {
                         backgroundColor: getSquareColor(square, position),
                       },
                       isWinningSquare(position) && styles.winningCell,
+                      isLiveWinner && styles.liveWinnerCell,
                       square.locked && styles.lockedCell,
                     ]}
                     onPress={() => claimSquare(position)}
@@ -790,6 +792,13 @@ export default function GameScreen() {
                       <Text style={styles.cellText} numberOfLines={1}>
                         {square.player_name.substring(0, 3)}
                       </Text>
+                    )}
+                    
+                    {/* Live Winner Indicator */}
+                    {isLiveWinner && !winningQuarters.length && (
+                      <View style={styles.liveWinnerBadge}>
+                        <Ionicons name="star" size={8} color="#000" />
+                      </View>
                     )}
                     
                     {/* Winner Badge */}
