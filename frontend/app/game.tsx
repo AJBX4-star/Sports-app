@@ -1103,9 +1103,11 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
   },
-  gridWrapper: {
-    alignItems: 'center',
+  gridScrollH: {
     marginBottom: 12,
+  },
+  gridWrapper: {
+    alignItems: 'flex-start',
   },
   topLabelRow: {
     flexDirection: 'row',
