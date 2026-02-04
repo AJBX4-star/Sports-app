@@ -83,7 +83,7 @@ export default function GameScreen() {
   }, []);
 
   useEffect(() => {
-    if (code && gameInfo) {
+    if (code) {
       fetchGame();
       connectSocket();
     }
@@ -92,7 +92,7 @@ export default function GameScreen() {
         socket.disconnect();
       }
     };
-  }, [code, gameInfo]);
+  }, [code]);
 
   const loadGameInfo = async () => {
     try {
