@@ -630,6 +630,7 @@ export default function GameScreen() {
             <Text style={styles.teamLabelV} numberOfLines={1}>{game.team_vertical}</Text>
           </View>
         </View>
+        </ScrollView>
 
         {/* Draft Info */}
         <View style={styles.draftInfo}>
