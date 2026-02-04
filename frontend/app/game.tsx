@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   Share,
   Modal,
   TextInput,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,8 +23,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Square {
   position: number;
+  number: number;
   player_name: string | null;
   claimed: boolean;
+  locked: boolean;
 }
 
 interface Winner {
@@ -38,6 +39,7 @@ interface Game {
   id: string;
   code: string;
   host_id: string;
+  host_name: string;
   team_horizontal: string;
   team_vertical: string;
   squares: Square[];
@@ -47,7 +49,14 @@ interface Game {
   winners: Winner[];
   current_turn: number;
   players: string[];
+  player_order: string[];
   is_active: boolean;
+  picks_per_turn: number;
+  picks_this_turn: number;
+  draft_style: string;
+  draft_direction: number;
+  board_locked: boolean;
+  draft_started: boolean;
 }
 
 interface GameInfo {
@@ -57,9 +66,9 @@ interface GameInfo {
   hostId: string | null;
 }
 
-// Cell size calculation - fixed size for mobile
-const CELL_SIZE = 32; // Fixed cell size
-const LABEL_SIZE = 32;
+// Cell size calculation
+const CELL_SIZE = Math.floor((SCREEN_WIDTH - 50) / 11);
+const LABEL_SIZE = CELL_SIZE;
 
 export default function GameScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
@@ -76,6 +85,11 @@ export default function GameScreen() {
   const [selectedQuarter, setSelectedQuarter] = useState(1);
   const [scoreH, setScoreH] = useState('');
   const [scoreV, setScoreV] = useState('');
+  const [showPlayerOrder, setShowPlayerOrder] = useState(false);
+  const [showHostClaim, setShowHostClaim] = useState(false);
+  const [hostClaimPosition, setHostClaimPosition] = useState<number | null>(null);
+  const [hostClaimPlayer, setHostClaimPlayer] = useState('');
+  const [hostClaimAsUnclaimed, setHostClaimAsUnclaimed] = useState(false);
 
   // Load game info and connect to socket
   useEffect(() => {
@@ -119,7 +133,13 @@ export default function GameScreen() {
     });
 
     newSocket.on('square_claimed', (data) => {
-      setGame(prev => prev ? { ...prev, squares: data.squares, current_turn: data.current_turn } : null);
+      setGame(prev => prev ? { 
+        ...prev, 
+        squares: data.squares, 
+        current_turn: data.current_turn ?? prev.current_turn,
+        picks_this_turn: data.picks_this_turn ?? prev.picks_this_turn,
+        board_locked: data.board_locked ?? prev.board_locked
+      } : null);
     });
 
     newSocket.on('numbers_randomized', (data) => {
@@ -136,7 +156,11 @@ export default function GameScreen() {
     });
 
     newSocket.on('player_joined', (data) => {
-      setGame(prev => prev ? { ...prev, players: data.players } : null);
+      setGame(prev => prev ? { 
+        ...prev, 
+        players: data.players,
+        player_order: data.player_order ?? prev.player_order
+      } : null);
     });
 
     newSocket.on('teams_updated', (data) => {
@@ -144,6 +168,19 @@ export default function GameScreen() {
         ...prev, 
         team_horizontal: data.team_horizontal, 
         team_vertical: data.team_vertical 
+      } : null);
+    });
+
+    newSocket.on('player_order_updated', (data) => {
+      setGame(prev => prev ? { ...prev, player_order: data.player_order } : null);
+    });
+
+    newSocket.on('draft_started', (data) => {
+      setGame(prev => prev ? { 
+        ...prev, 
+        player_order: data.player_order,
+        current_turn: data.current_turn,
+        draft_started: true
       } : null);
     });
 
@@ -170,14 +207,19 @@ export default function GameScreen() {
   const claimSquare = async (position: number) => {
     if (!game || !gameInfo) return;
     
-    const square = game.squares[position];
-    if (square.claimed) {
-      Alert.alert('Square Taken', `This square is claimed by ${square.player_name}`);
+    // Check if board is locked
+    if (game.board_locked) {
       return;
+    }
+    
+    const square = game.squares[position];
+    if (square.claimed || square.locked) {
+      return; // Square already claimed/locked - silently ignore
     }
 
     // Check if it's this player's turn
-    const currentPlayerName = game.players[game.current_turn];
+    const playerOrder = game.player_order.length > 0 ? game.player_order : game.players;
+    const currentPlayerName = playerOrder[game.current_turn % playerOrder.length];
     if (currentPlayerName !== gameInfo.playerName) {
       Alert.alert('Not Your Turn', `It's ${currentPlayerName}'s turn`);
       return;
@@ -190,6 +232,7 @@ export default function GameScreen() {
         body: JSON.stringify({
           position: position,
           player_name: gameInfo.playerName,
+          claimed_by_host: false,
         }),
       });
 
@@ -198,37 +241,82 @@ export default function GameScreen() {
         throw new Error(error.detail);
       }
       
-      // Update local state immediately with spread to force re-render
       const data = await response.json();
       setGame({...data});
+    } catch (error: any) {
+      if (error.message !== 'Square already claimed') {
+        Alert.alert('Error', error.message || 'Failed to claim square');
+      }
+    }
+  };
+
+  const hostClaimSquare = async () => {
+    if (!game || hostClaimPosition === null) return;
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/host-claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          position: hostClaimPosition,
+          player_name: hostClaimAsUnclaimed ? null : hostClaimPlayer,
+          as_unclaimed: hostClaimAsUnclaimed,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail);
+      }
+      
+      const data = await response.json();
+      setGame({...data});
+      setShowHostClaim(false);
+      setHostClaimPosition(null);
+      setHostClaimPlayer('');
+      setHostClaimAsUnclaimed(false);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to claim square');
     }
   };
 
+  const openHostClaimModal = (position: number) => {
+    if (!gameInfo?.isHost) return;
+    if (game?.squares[position].claimed) return;
+    
+    setHostClaimPosition(position);
+    setHostClaimPlayer(gameInfo.playerName);
+    setHostClaimAsUnclaimed(false);
+    setShowHostClaim(true);
+  };
+
   const randomizeNumbers = async () => {
     if (!game) return;
     
-    // On web, Alert.alert with buttons doesn't work, so just execute directly
-    // The confirmation is built into the button UI showing "Randomize Numbers"
+    if (!game.board_locked) {
+      Alert.alert('Board Not Locked', 'All 100 squares must be claimed before randomizing numbers');
+      return;
+    }
+    
     try {
       const response = await fetch(`${BACKEND_URL}/api/games/${code}/randomize`, {
         method: 'POST',
       });
-      if (!response.ok) throw new Error('Failed to randomize');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to randomize');
+      }
       
-      // Update local state with response
       const data = await response.json();
       setGame({...data});
-    } catch (error) {
-      console.error('Failed to randomize numbers:', error);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to randomize numbers');
     }
   };
 
   const openWinnerSelection = (quarter: number) => {
     if (!game || !game.numbers_randomized) {
-      // On web, Alert.alert might not work well, so log and show in UI
-      console.log('Numbers not randomized yet');
+      Alert.alert('Numbers Not Set', 'Please randomize numbers first');
       return;
     }
     setSelectedQuarter(quarter);
@@ -257,7 +345,6 @@ export default function GameScreen() {
         });
         if (!response.ok) throw new Error('Failed to set winner');
         
-        // Update local state with response
         const data = await response.json();
         setGame({...data});
         setShowWinnerInput(false);
@@ -265,7 +352,7 @@ export default function GameScreen() {
         console.error('Failed to set winner:', error);
       }
     } else {
-      console.error('Invalid scores - number not found in grid');
+      Alert.alert('Error', 'Invalid scores - number not found in grid');
     }
   };
 
@@ -290,9 +377,64 @@ export default function GameScreen() {
         }),
       });
       if (!response.ok) throw new Error('Failed to update teams');
+      const data = await response.json();
+      setGame({...data});
       setShowTeamModal(false);
     } catch (error) {
       Alert.alert('Error', 'Failed to update team names');
+    }
+  };
+
+  const randomizePlayerOrder = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/player-order`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_order: [], randomize: true }),
+      });
+      if (!response.ok) throw new Error('Failed to randomize order');
+      const data = await response.json();
+      setGame({...data});
+    } catch (error) {
+      Alert.alert('Error', 'Failed to randomize player order');
+    }
+  };
+
+  const movePlayerUp = async (index: number) => {
+    if (!game || index === 0) return;
+    const newOrder = [...game.player_order];
+    [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/player-order`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_order: newOrder, randomize: false }),
+      });
+      if (!response.ok) throw new Error('Failed to update order');
+      const data = await response.json();
+      setGame({...data});
+    } catch (error) {
+      console.error('Failed to update player order');
+    }
+  };
+
+  const movePlayerDown = async (index: number) => {
+    if (!game || index === game.player_order.length - 1) return;
+    const newOrder = [...game.player_order];
+    [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/player-order`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_order: newOrder, randomize: false }),
+      });
+      if (!response.ok) throw new Error('Failed to update order');
+      const data = await response.json();
+      setGame({...data});
+    } catch (error) {
+      console.error('Failed to update player order');
     }
   };
 
@@ -307,21 +449,29 @@ export default function GameScreen() {
   const getSquareColor = (square: Square, position: number) => {
     if (isWinningSquare(position)) return '#4CAF50';
     if (square.claimed) {
+      if (!square.player_name) return '#666'; // Unclaimed but locked
       const colors = ['#E91E63', '#9C27B0', '#3F51B5', '#00BCD4', '#FF9800', '#795548', '#607D8B', '#F44336', '#2196F3', '#FFEB3B'];
-      const index = game?.players.indexOf(square.player_name || '') || 0;
-      return colors[index % colors.length];
+      const playerOrder = game?.player_order.length ? game.player_order : game?.players || [];
+      const index = playerOrder.indexOf(square.player_name);
+      return colors[index >= 0 ? index % colors.length : 0];
     }
     return 'rgba(255,255,255,0.08)';
   };
 
   const getCurrentTurnPlayer = () => {
     if (!game) return '';
-    return game.players[game.current_turn] || '';
+    const playerOrder = game.player_order.length > 0 ? game.player_order : game.players;
+    return playerOrder[game.current_turn % playerOrder.length] || '';
   };
 
   const getClaimedCount = () => {
     if (!game) return 0;
     return game.squares.filter(s => s.claimed).length;
+  };
+
+  const getRemainingPicks = () => {
+    if (!game) return 0;
+    return game.picks_per_turn - game.picks_this_turn;
   };
 
   if (loading) {
@@ -348,6 +498,8 @@ export default function GameScreen() {
     );
   }
 
+  const playerOrder = game.player_order.length > 0 ? game.player_order : game.players;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -372,15 +524,23 @@ export default function GameScreen() {
           </View>
         </View>
 
-        {/* Turn Indicator */}
-        <View style={styles.turnIndicator}>
-          <Text style={styles.turnText}>
-            {getClaimedCount() < 100 
-              ? `${getCurrentTurnPlayer()}'s Turn` 
-              : 'All squares claimed!'}
-          </Text>
-          <Text style={styles.claimedText}>{getClaimedCount()}/100 claimed</Text>
-        </View>
+        {/* Status Banner */}
+        {game.board_locked ? (
+          <View style={[styles.statusBanner, styles.lockedBanner]}>
+            <Ionicons name="lock-closed" size={18} color="#fff" />
+            <Text style={styles.statusText}>Board Locked - All squares claimed!</Text>
+          </View>
+        ) : (
+          <View style={styles.turnIndicator}>
+            <View style={styles.turnInfo}>
+              <Text style={styles.turnText}>{getCurrentTurnPlayer()}'s Turn</Text>
+              {game.picks_per_turn > 1 && (
+                <Text style={styles.picksText}>{getRemainingPicks()} pick{getRemainingPicks() !== 1 ? 's' : ''} left</Text>
+              )}
+            </View>
+            <Text style={styles.claimedText}>{getClaimedCount()}/100</Text>
+          </View>
+        )}
 
         {/* Grid */}
         <View style={styles.gridWrapper}>
@@ -418,6 +578,7 @@ export default function GameScreen() {
                 const position = row * 10 + col;
                 const square = game.squares[position];
                 const winningQuarters = getWinningQuarters(position);
+                const squareNumber = position + 1;
                 return (
                   <TouchableOpacity
                     key={`cell-${position}`}
@@ -429,15 +590,27 @@ export default function GameScreen() {
                         backgroundColor: getSquareColor(square, position),
                       },
                       isWinningSquare(position) && styles.winningCell,
+                      square.locked && styles.lockedCell,
                     ]}
                     onPress={() => claimSquare(position)}
-                    activeOpacity={0.7}
+                    onLongPress={() => gameInfo?.isHost && openHostClaimModal(position)}
+                    activeOpacity={square.claimed ? 1 : 0.7}
+                    disabled={square.claimed || game.board_locked}
                   >
-                    {square.claimed && (
+                    {/* Square Number */}
+                    <Text style={[
+                      styles.squareNumber,
+                      square.claimed && styles.squareNumberClaimed
+                    ]}>{squareNumber}</Text>
+                    
+                    {/* Player Initials */}
+                    {square.claimed && square.player_name && (
                       <Text style={styles.cellText} numberOfLines={1}>
-                        {(square.player_name || '').substring(0, 3)}
+                        {square.player_name.substring(0, 3)}
                       </Text>
                     )}
+                    
+                    {/* Winner Badge */}
                     {winningQuarters.length > 0 && (
                       <View style={styles.winnerBadge}>
                         <Text style={styles.winnerBadgeText}>
@@ -457,13 +630,34 @@ export default function GameScreen() {
           </View>
         </View>
 
+        {/* Draft Info */}
+        <View style={styles.draftInfo}>
+          <View style={styles.draftInfoItem}>
+            <Ionicons name="git-branch" size={16} color="#4CAF50" />
+            <Text style={styles.draftInfoText}>
+              {game.draft_style === 'snake' ? 'Snake Draft' : 'Standard Draft'}
+            </Text>
+          </View>
+          <View style={styles.draftInfoItem}>
+            <Ionicons name="layers" size={16} color="#2196F3" />
+            <Text style={styles.draftInfoText}>{game.picks_per_turn} pick{game.picks_per_turn > 1 ? 's' : ''}/turn</Text>
+          </View>
+        </View>
+
         {/* Players List */}
         <View style={styles.playersSection}>
-          <Text style={styles.sectionTitle}>Players</Text>
+          <View style={styles.playersSectionHeader}>
+            <Text style={styles.sectionTitle}>Player Order</Text>
+            {gameInfo?.isHost && (
+              <TouchableOpacity onPress={() => setShowPlayerOrder(true)}>
+                <Ionicons name="create-outline" size={20} color="#4CAF50" />
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.playersList}>
-            {game.players.map((player, index) => {
+            {playerOrder.map((player, index) => {
               const colors = ['#E91E63', '#9C27B0', '#3F51B5', '#00BCD4', '#FF9800', '#795548', '#607D8B', '#F44336', '#2196F3', '#FFEB3B'];
-              const isCurrentTurn = game.current_turn === index;
+              const isCurrentTurn = game.current_turn % playerOrder.length === index && !game.board_locked;
               return (
                 <View 
                   key={player} 
@@ -473,6 +667,7 @@ export default function GameScreen() {
                     isCurrentTurn && styles.currentTurnChip,
                   ]}
                 >
+                  <Text style={styles.playerOrder}>{index + 1}</Text>
                   <Text style={styles.playerChipText}>{player}</Text>
                   {isCurrentTurn && <Ionicons name="chevron-forward" size={14} color="#fff" />}
                 </View>
@@ -509,16 +704,17 @@ export default function GameScreen() {
             <Text style={styles.modalTitle}>Host Controls</Text>
             
             <TouchableOpacity
-              style={[styles.modalButton, game.numbers_randomized && styles.disabledButton]}
+              style={[styles.modalButton, (!game.board_locked || game.numbers_randomized) && styles.disabledButton]}
               onPress={() => {
                 setShowHostMenu(false);
                 randomizeNumbers();
               }}
-              disabled={game.numbers_randomized}
+              disabled={!game.board_locked || game.numbers_randomized}
             >
               <Ionicons name="shuffle" size={24} color="#fff" />
               <Text style={styles.modalButtonText}>
-                {game.numbers_randomized ? 'Numbers Set' : 'Randomize Numbers'}
+                {game.numbers_randomized ? 'Numbers Set' : 
+                 !game.board_locked ? 'Fill Board First' : 'Randomize Numbers'}
               </Text>
             </TouchableOpacity>
 
@@ -533,6 +729,17 @@ export default function GameScreen() {
             >
               <Ionicons name="create-outline" size={24} color="#fff" />
               <Text style={styles.modalButtonText}>Edit Team Names</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                setShowHostMenu(false);
+                setShowPlayerOrder(true);
+              }}
+            >
+              <Ionicons name="people" size={24} color="#fff" />
+              <Text style={styles.modalButtonText}>Manage Player Order</Text>
             </TouchableOpacity>
 
             <Text style={styles.quarterTitle}>Select Quarter Winners</Text>
@@ -550,6 +757,10 @@ export default function GameScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+
+            <Text style={styles.hostTip}>
+              Tip: Long-press any unclaimed square to claim it for another player
+            </Text>
 
             <TouchableOpacity
               style={styles.closeButton}
@@ -660,6 +871,130 @@ export default function GameScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Player Order Modal */}
+      <Modal
+        visible={showPlayerOrder}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPlayerOrder(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Player Order</Text>
+            <Text style={styles.modalSubtitle}>Drag to reorder or randomize</Text>
+
+            <TouchableOpacity style={styles.randomizeButton} onPress={randomizePlayerOrder}>
+              <Ionicons name="shuffle" size={20} color="#fff" />
+              <Text style={styles.randomizeButtonText}>Randomize Order</Text>
+            </TouchableOpacity>
+
+            <ScrollView style={styles.playerOrderList}>
+              {playerOrder.map((player, index) => (
+                <View key={player} style={styles.playerOrderItem}>
+                  <Text style={styles.playerOrderNumber}>{index + 1}</Text>
+                  <Text style={styles.playerOrderName}>{player}</Text>
+                  <View style={styles.playerOrderButtons}>
+                    <TouchableOpacity 
+                      style={[styles.orderButton, index === 0 && styles.orderButtonDisabled]}
+                      onPress={() => movePlayerUp(index)}
+                      disabled={index === 0}
+                    >
+                      <Ionicons name="chevron-up" size={20} color={index === 0 ? '#444' : '#fff'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.orderButton, index === playerOrder.length - 1 && styles.orderButtonDisabled]}
+                      onPress={() => movePlayerDown(index)}
+                      disabled={index === playerOrder.length - 1}
+                    >
+                      <Ionicons name="chevron-down" size={20} color={index === playerOrder.length - 1 ? '#444' : '#fff'} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowPlayerOrder(false)}
+            >
+              <Text style={styles.closeButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Host Claim Modal */}
+      <Modal
+        visible={showHostClaim}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHostClaim(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Claim Square #{(hostClaimPosition ?? 0) + 1}</Text>
+            <Text style={styles.modalSubtitle}>Select who this square belongs to</Text>
+
+            <View style={styles.claimOptions}>
+              <TouchableOpacity
+                style={[styles.claimOption, !hostClaimAsUnclaimed && styles.claimOptionSelected]}
+                onPress={() => setHostClaimAsUnclaimed(false)}
+              >
+                <Ionicons name="person" size={24} color={!hostClaimAsUnclaimed ? '#fff' : '#888'} />
+                <Text style={[styles.claimOptionText, !hostClaimAsUnclaimed && styles.claimOptionTextSelected]}>
+                  Claim for Player
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.claimOption, hostClaimAsUnclaimed && styles.claimOptionSelected]}
+                onPress={() => setHostClaimAsUnclaimed(true)}
+              >
+                <Ionicons name="help-circle" size={24} color={hostClaimAsUnclaimed ? '#fff' : '#888'} />
+                <Text style={[styles.claimOptionText, hostClaimAsUnclaimed && styles.claimOptionTextSelected]}>
+                  Mark as Unclaimed
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {!hostClaimAsUnclaimed && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Select Player</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.playerSelectScroll}>
+                  {game.players.map((player) => (
+                    <TouchableOpacity
+                      key={player}
+                      style={[
+                        styles.playerSelectButton,
+                        hostClaimPlayer === player && styles.playerSelectButtonActive,
+                      ]}
+                      onPress={() => setHostClaimPlayer(player)}
+                    >
+                      <Text style={[
+                        styles.playerSelectText,
+                        hostClaimPlayer === player && styles.playerSelectTextActive,
+                      ]}>{player}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            <TouchableOpacity style={styles.saveButton} onPress={hostClaimSquare}>
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.saveButtonText}>Confirm Claim</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowHostClaim(false)}
+            >
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -723,6 +1058,23 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: 4,
   },
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  lockedBanner: {
+    backgroundColor: '#4CAF50',
+  },
+  statusText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
   turnIndicator: {
     backgroundColor: 'rgba(255,255,255,0.1)',
     padding: 10,
@@ -732,10 +1084,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  turnInfo: {
+    flex: 1,
+  },
   turnText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  picksText: {
+    color: '#4CAF50',
+    fontSize: 12,
+    marginTop: 2,
   },
   claimedText: {
     color: '#888',
@@ -793,10 +1153,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.15)',
+    position: 'relative',
   },
   winningCell: {
     borderWidth: 2,
     borderColor: '#fff',
+  },
+  lockedCell: {
+    opacity: 0.9,
+  },
+  squareNumber: {
+    position: 'absolute',
+    top: 1,
+    left: 2,
+    fontSize: 7,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '500',
+  },
+  squareNumberClaimed: {
+    color: 'rgba(255,255,255,0.7)',
   },
   cellText: {
     color: '#fff',
@@ -815,15 +1190,38 @@ const styles = StyleSheet.create({
     fontSize: 7,
     fontWeight: 'bold',
   },
-  playersSection: {
-    marginTop: 16,
+  draftInfo: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
     marginBottom: 12,
+  },
+  draftInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  draftInfoText: {
+    color: '#aaa',
+    fontSize: 12,
+  },
+  playersSection: {
+    marginBottom: 12,
+  },
+  playersSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
   },
   sectionTitle: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 10,
   },
   playersList: {
     flexDirection: 'row',
@@ -831,12 +1229,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   playerChip: {
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  playerOrder: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginRight: 2,
   },
   currentTurnChip: {
     borderWidth: 2,
@@ -887,6 +1291,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
+    maxHeight: '85%',
   },
   modalTitle: {
     color: '#fff',
@@ -898,7 +1303,7 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     color: '#888',
     fontSize: 14,
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
   },
   modalButton: {
@@ -928,7 +1333,7 @@ const styles = StyleSheet.create({
   quarterButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   quarterButton: {
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -945,6 +1350,13 @@ const styles = StyleSheet.create({
   quarterButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  hostTip: {
+    color: '#888',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 10,
+    fontStyle: 'italic',
   },
   closeButton: {
     padding: 14,
@@ -985,5 +1397,100 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  randomizeButton: {
+    backgroundColor: '#2196F3',
+    padding: 12,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  randomizeButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  playerOrderList: {
+    maxHeight: 300,
+  },
+  playerOrderItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  playerOrderNumber: {
+    color: '#4CAF50',
+    fontWeight: 'bold',
+    fontSize: 16,
+    width: 30,
+  },
+  playerOrderName: {
+    color: '#fff',
+    fontSize: 15,
+    flex: 1,
+  },
+  playerOrderButtons: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  orderButton: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 6,
+    borderRadius: 4,
+  },
+  orderButtonDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  claimOptions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  claimOption: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  claimOptionSelected: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#fff',
+  },
+  claimOptionText: {
+    color: '#888',
+    marginTop: 8,
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  claimOptionTextSelected: {
+    color: '#fff',
+  },
+  playerSelectScroll: {
+    maxHeight: 50,
+  },
+  playerSelectButton: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  playerSelectButtonActive: {
+    backgroundColor: '#4CAF50',
+  },
+  playerSelectText: {
+    color: '#888',
+    fontWeight: '500',
+  },
+  playerSelectTextActive: {
+    color: '#fff',
   },
 });
