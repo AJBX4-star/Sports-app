@@ -97,8 +97,11 @@ export default function GameScreen() {
   const loadGameInfo = async () => {
     try {
       const storedInfo = await AsyncStorage.getItem('currentGame');
+      console.log('Loaded game info:', storedInfo);
       if (storedInfo) {
-        setGameInfo(JSON.parse(storedInfo));
+        const parsed = JSON.parse(storedInfo);
+        console.log('Parsed game info:', parsed);
+        setGameInfo(parsed);
       }
     } catch (error) {
       console.error('Error loading game info:', error);
