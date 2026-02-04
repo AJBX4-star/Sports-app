@@ -1038,6 +1038,18 @@ export default function GameScreen() {
               </Text>
             </TouchableOpacity>
 
+            {/* Skip to Next Player */}
+            <TouchableOpacity
+              style={[styles.modalButton, styles.skipButton, game.board_locked && styles.disabledButton]}
+              onPress={skipTurn}
+              disabled={game.board_locked}
+            >
+              <Ionicons name="play-skip-forward" size={24} color="#fff" />
+              <Text style={styles.modalButtonText}>
+                {game.board_locked ? 'Board Locked' : `Skip ${getCurrentTurnPlayer()}'s Turn`}
+              </Text>
+            </TouchableOpacity>
+
             {/* New: Add/Remove Players */}
             <View style={styles.playerManageRow}>
               <TouchableOpacity
