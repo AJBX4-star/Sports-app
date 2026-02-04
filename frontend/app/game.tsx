@@ -93,6 +93,15 @@ export default function GameScreen() {
   const [hostClaimPosition, setHostClaimPosition] = useState<number | null>(null);
   const [hostClaimPlayer, setHostClaimPlayer] = useState('');
   const [hostClaimAsUnclaimed, setHostClaimAsUnclaimed] = useState(false);
+  // New state for additional features
+  const [showScoreModal, setShowScoreModal] = useState(false);
+  const [liveScoreH, setLiveScoreH] = useState('0');
+  const [liveScoreV, setLiveScoreV] = useState('0');
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const [showRemovePlayer, setShowRemovePlayer] = useState(false);
+  const [playerToRemove, setPlayerToRemove] = useState('');
+  const [releaseSquares, setReleaseSquares] = useState(false);
 
   // Load game info and connect to socket
   useEffect(() => {
