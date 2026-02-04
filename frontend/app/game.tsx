@@ -827,21 +827,6 @@ export default function GameScreen() {
             </View>
           </View>
         </ScrollView>
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
-
-          {/* Bottom Team Label (Left Team - Vertical) */}
-          <View style={styles.bottomLabelRow}>
-            <Text style={styles.teamLabelV} numberOfLines={1}>{game.team_vertical}</Text>
-          </View>
-        </View>
-        </ScrollView>
 
         {/* Draft Info */}
         <View style={styles.draftInfo}>
