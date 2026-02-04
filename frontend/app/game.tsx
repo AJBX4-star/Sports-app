@@ -1603,8 +1603,11 @@ const styles = StyleSheet.create({
   },
   teamLabelV: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 'bold',
+    transform: [{ rotate: '-90deg' }],
+    width: CELL_SIZE * 10,
+    textAlign: 'center',
   },
   gridRow: {
     flexDirection: 'row',
