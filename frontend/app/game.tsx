@@ -651,6 +651,35 @@ export default function GameScreen() {
           </View>
         </View>
 
+        {/* Live Score Display */}
+        <TouchableOpacity 
+          style={styles.scoreDisplay}
+          onPress={() => {
+            if (gameInfo?.isHost) {
+              setLiveScoreH(String(game.score_horizontal || 0));
+              setLiveScoreV(String(game.score_vertical || 0));
+              setShowScoreModal(true);
+            }
+          }}
+        >
+          <View style={styles.scoreTeam}>
+            <Text style={styles.scoreTeamName} numberOfLines={1}>{game.team_horizontal}</Text>
+            <Text style={styles.scoreValue}>{game.score_horizontal || 0}</Text>
+          </View>
+          <View style={styles.scoreDivider}>
+            <Text style={styles.scoreVs}>VS</Text>
+          </View>
+          <View style={styles.scoreTeam}>
+            <Text style={styles.scoreTeamName} numberOfLines={1}>{game.team_vertical}</Text>
+            <Text style={styles.scoreValue}>{game.score_vertical || 0}</Text>
+          </View>
+          {gameInfo?.isHost && (
+            <View style={styles.scoreEditHint}>
+              <Ionicons name="create-outline" size={14} color="#888" />
+            </View>
+          )}
+        </TouchableOpacity>
+
         {/* Status Banner */}
         {game.board_locked ? (
           <View style={[styles.statusBanner, styles.lockedBanner]}>
