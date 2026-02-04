@@ -68,10 +68,10 @@ export default function GameScreen() {
   const [editTeamH, setEditTeamH] = useState('');
   const [editTeamV, setEditTeamV] = useState('');
 
-  // Calculate grid size based on screen
-  const gridPadding = 16;
-  const labelSize = 40;
-  const availableWidth = SCREEN_WIDTH - (gridPadding * 2) - labelSize;
+  // Calculate grid size based on screen - make sure all 10x10 fits
+  const gridPadding = 8;
+  const labelSize = 30;
+  const availableWidth = SCREEN_WIDTH - (gridPadding * 2) - labelSize - 10;
   const cellSize = Math.floor(availableWidth / 10);
 
   // Load game info and connect to socket
