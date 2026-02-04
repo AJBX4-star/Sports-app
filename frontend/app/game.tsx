@@ -1567,6 +1567,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
+  gridMainContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  leftTeamLabel: {
+    width: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 2,
+  },
   numbersRow: {
     flexDirection: 'row',
   },
