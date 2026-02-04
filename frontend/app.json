@@ -39,17 +39,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "sports-squares"
-      }
-    },
-    "updates": {
-      "url": "https://u.expo.dev/sports-squares"
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
     }
   }
 }
