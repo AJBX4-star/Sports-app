@@ -275,6 +275,16 @@ export default function GameScreen() {
       } : null);
     });
 
+    newSocket.on('turn_skipped', (data) => {
+      console.log('Turn skipped event received');
+      setGame(prev => prev ? { 
+        ...prev, 
+        current_turn: data.current_turn,
+        picks_this_turn: data.picks_this_turn,
+        draft_direction: data.draft_direction
+      } : null);
+    });
+
     setSocket(newSocket);
   };
 
