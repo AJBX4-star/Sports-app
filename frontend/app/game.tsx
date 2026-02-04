@@ -476,6 +476,95 @@ export default function GameScreen() {
     }
   };
 
+  // Undo last claim
+  const undoLastClaim = async () => {
+    if (!game || !game.last_claim) return;
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/undo`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to undo');
+      }
+      const data = await response.json();
+      setGame({...data});
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to undo last claim');
+    }
+  };
+
+  // Add player manually
+  const addPlayer = async () => {
+    if (!newPlayerName.trim()) return;
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/add-player`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_name: newPlayerName.trim() }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to add player');
+      }
+      const data = await response.json();
+      setGame({...data});
+      setNewPlayerName('');
+      setShowAddPlayer(false);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add player');
+    }
+  };
+
+  // Remove player
+  const removePlayer = async () => {
+    if (!playerToRemove) return;
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/remove-player`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          player_name: playerToRemove,
+          release_squares: releaseSquares
+        }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to remove player');
+      }
+      const data = await response.json();
+      setGame({...data});
+      setPlayerToRemove('');
+      setReleaseSquares(false);
+      setShowRemovePlayer(false);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to remove player');
+    }
+  };
+
+  // Update live score
+  const updateLiveScore = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/score`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          score_horizontal: parseInt(liveScoreH) || 0,
+          score_vertical: parseInt(liveScoreV) || 0
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to update score');
+      const data = await response.json();
+      setGame({...data});
+      setShowScoreModal(false);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update score');
+    }
+  };
+
   const isWinningSquare = (position: number) => {
     return game?.winners.some(w => w.position === position) || false;
   };
