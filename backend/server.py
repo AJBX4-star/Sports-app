@@ -576,6 +576,177 @@ async def start_draft(code: str, request: StartDraftRequest):
     
     return updated_game
 
+@api_router.post("/games/{code}/undo")
+async def undo_last_claim(code: str):
+    """Undo the last square claim (host only)"""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    last_claim = game.get('last_claim')
+    if not last_claim:
+        raise HTTPException(status_code=400, detail="No claim to undo")
+    
+    squares = game.get('squares', [])
+    position = last_claim.get('position')
+    
+    # Reset the square
+    squares[position] = {
+        'position': position,
+        'number': position + 1,
+        'player_name': None,
+        'claimed': False,
+        'locked': False
+    }
+    
+    # Restore turn state
+    await db.games.update_one(
+        {"code": code.upper()},
+        {
+            "$set": {
+                "squares": squares,
+                "current_turn": last_claim.get('previous_turn', 0),
+                "picks_this_turn": last_claim.get('previous_picks', 0),
+                "draft_direction": last_claim.get('previous_direction', 1),
+                "board_locked": False,
+                "last_claim": None
+            }
+        }
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    # Emit socket event
+    await sio.emit('square_unclaimed', {
+        'position': position,
+        'squares': updated_game.get('squares', []),
+        'current_turn': last_claim.get('previous_turn', 0)
+    }, room=code.upper())
+    
+    return updated_game
+
+@api_router.post("/games/{code}/add-player")
+async def add_player(code: str, request: AddPlayerRequest):
+    """Manually add a player to the game"""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    if request.player_name in game.get('players', []):
+        raise HTTPException(status_code=400, detail="Player already in game")
+    
+    await db.games.update_one(
+        {"code": code.upper()},
+        {
+            "$push": {
+                "players": request.player_name,
+                "player_order": request.player_name
+            }
+        }
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    await sio.emit('player_joined', {
+        'player_name': request.player_name,
+        'players': updated_game.get('players', []),
+        'player_order': updated_game.get('player_order', [])
+    }, room=code.upper())
+    
+    return updated_game
+
+@api_router.post("/games/{code}/remove-player")
+async def remove_player(code: str, request: RemovePlayerRequest):
+    """Remove a player from the game"""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    if request.player_name not in game.get('players', []):
+        raise HTTPException(status_code=400, detail="Player not in game")
+    
+    # Don't allow removing the host
+    if request.player_name == game.get('host_name'):
+        raise HTTPException(status_code=400, detail="Cannot remove the host")
+    
+    squares = game.get('squares', [])
+    
+    # Optionally release their squares
+    if request.release_squares:
+        for i, square in enumerate(squares):
+            if square.get('player_name') == request.player_name:
+                squares[i] = {
+                    'position': i,
+                    'number': i + 1,
+                    'player_name': None,
+                    'claimed': False,
+                    'locked': False
+                }
+    
+    # Remove from players and player_order
+    players = [p for p in game.get('players', []) if p != request.player_name]
+    player_order = [p for p in game.get('player_order', []) if p != request.player_name]
+    
+    # Adjust current turn if needed
+    current_turn = game.get('current_turn', 0)
+    if current_turn >= len(player_order):
+        current_turn = 0
+    
+    await db.games.update_one(
+        {"code": code.upper()},
+        {
+            "$set": {
+                "players": players,
+                "player_order": player_order,
+                "squares": squares,
+                "current_turn": current_turn,
+                "board_locked": sum(1 for s in squares if s.get('claimed', False)) >= 100
+            }
+        }
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    await sio.emit('player_removed', {
+        'player_name': request.player_name,
+        'players': updated_game.get('players', []),
+        'player_order': updated_game.get('player_order', []),
+        'squares': updated_game.get('squares', [])
+    }, room=code.upper())
+    
+    return updated_game
+
+@api_router.put("/games/{code}/score")
+async def update_score(code: str, request: UpdateScoreRequest):
+    """Update live scores"""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    await db.games.update_one(
+        {"code": code.upper()},
+        {
+            "$set": {
+                "score_horizontal": request.score_horizontal,
+                "score_vertical": request.score_vertical
+            }
+        }
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    # Emit socket event
+    await sio.emit('score_updated', {
+        'score_horizontal': request.score_horizontal,
+        'score_vertical': request.score_vertical
+    }, room=code.upper())
+    
+    return updated_game
+
 # Socket.IO events
 @sio.event
 async def connect(sid, environ):
