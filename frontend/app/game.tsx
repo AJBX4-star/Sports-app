@@ -543,7 +543,8 @@ export default function GameScreen() {
         )}
 
         {/* Grid */}
-        <View style={styles.gridWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.gridScrollH}>
+          <View style={styles.gridWrapper}>
           {/* Top Team Label */}
           <View style={styles.topLabelRow}>
             <View style={{ width: LABEL_SIZE }} />
