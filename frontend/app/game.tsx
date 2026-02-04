@@ -573,8 +573,33 @@ export default function GameScreen() {
     return game?.winners.filter(w => w.position === position).map(w => w.quarter) || [];
   };
 
+  // Calculate current winning square based on live scores
+  const getCurrentWinningPosition = (): number | null => {
+    if (!game || !game.numbers_randomized || !game.numbers_top || !game.numbers_left) {
+      return null;
+    }
+    
+    const hDigit = (game.score_horizontal || 0) % 10;
+    const vDigit = (game.score_vertical || 0) % 10;
+    
+    const col = game.numbers_top.indexOf(hDigit);
+    const row = game.numbers_left.indexOf(vDigit);
+    
+    if (col !== -1 && row !== -1) {
+      return row * 10 + col;
+    }
+    return null;
+  };
+
+  const isCurrentWinningSquare = (position: number) => {
+    return getCurrentWinningPosition() === position;
+  };
+
   const getSquareColor = (square: Square, position: number) => {
+    // First check if this is an official quarter winner
     if (isWinningSquare(position)) return '#4CAF50';
+    // Then check if this is the current winning square based on live score
+    if (isCurrentWinningSquare(position)) return '#FFD700'; // Gold color for current winner
     if (square.claimed) {
       if (!square.player_name) return '#666'; // Unclaimed but locked
       const colors = ['#E91E63', '#9C27B0', '#3F51B5', '#00BCD4', '#FF9800', '#795548', '#607D8B', '#F44336', '#2196F3', '#FFEB3B'];
