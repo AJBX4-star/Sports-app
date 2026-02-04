@@ -379,75 +379,79 @@ export default function GameScreen() {
         </View>
 
         {/* Grid */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gridScroll}>
-          <View style={styles.gridWrapper}>
-            {/* Top Team Label */}
-            <View style={styles.topLabelRow}>
-              <View style={{ width: LABEL_SIZE }} />
-              <View style={styles.teamLabelContainer}>
-                <Text style={styles.teamLabelH} numberOfLines={1}>{game.team_horizontal}</Text>
-              </View>
+        <View style={styles.gridWrapper}>
+          {/* Top Team Label */}
+          <View style={styles.topLabelRow}>
+            <View style={{ width: LABEL_SIZE }} />
+            <View style={[styles.teamLabelContainer, { width: CELL_SIZE * 10 }]}>
+              <Text style={styles.teamLabelH} numberOfLines={1}>{game.team_horizontal}</Text>
             </View>
+          </View>
 
-            {/* Numbers Row (Top) */}
-            <View style={styles.numbersRow}>
-              <View style={[styles.cornerCell, { width: LABEL_SIZE, height: LABEL_SIZE }]} />
-              {Array.from({ length: 10 }).map((_, i) => (
-                <View key={`top-${i}`} style={[styles.numberCell, { width: CELL_SIZE, height: LABEL_SIZE }]}>
-                  <Text style={styles.numberText}>
-                    {game.numbers_randomized && game.numbers_top ? game.numbers_top[i] : '?'}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Grid Rows */}
-            <View style={styles.gridBody}>
-              {/* Left Team Label */}
-              <View style={styles.leftLabelContainer}>
-                <Text style={styles.teamLabelV} numberOfLines={1}>{game.team_vertical}</Text>
+          {/* Numbers Row (Top) */}
+          <View style={styles.numbersRow}>
+            <View style={[styles.cornerCell, { width: LABEL_SIZE, height: LABEL_SIZE }]} />
+            {Array.from({ length: 10 }).map((_, i) => (
+              <View key={`top-${i}`} style={[styles.numberCell, { width: CELL_SIZE, height: LABEL_SIZE }]}>
+                <Text style={styles.numberText}>
+                  {game.numbers_randomized && game.numbers_top ? game.numbers_top[i] : '?'}
+                </Text>
               </View>
-              
-              <View style={styles.gridMain}>
-                {Array.from({ length: 10 }).map((_, row) => (
-                  <View key={`row-${row}`} style={styles.gridRow}>
-                    {/* Left Number */}
-                    <View style={[styles.numberCell, { width: LABEL_SIZE, height: CELL_SIZE }]}>
-                      <Text style={styles.numberText}>
-                        {game.numbers_randomized && game.numbers_left ? game.numbers_left[row] : '?'}
+            ))}
+          </View>
+
+          {/* Grid Rows with Left Numbers */}
+          {Array.from({ length: 10 }).map((_, row) => (
+            <View key={`row-${row}`} style={styles.gridRow}>
+              {/* Left Number */}
+              <View style={[styles.numberCell, { width: LABEL_SIZE, height: CELL_SIZE }]}>
+                <Text style={styles.numberText}>
+                  {game.numbers_randomized && game.numbers_left ? game.numbers_left[row] : '?'}
+                </Text>
+              </View>
+              {/* Grid Cells */}
+              {Array.from({ length: 10 }).map((_, col) => {
+                const position = row * 10 + col;
+                const square = game.squares[position];
+                const winningQuarters = getWinningQuarters(position);
+                return (
+                  <TouchableOpacity
+                    key={`cell-${position}`}
+                    style={[
+                      styles.cell,
+                      { 
+                        width: CELL_SIZE, 
+                        height: CELL_SIZE,
+                        backgroundColor: getSquareColor(square, position),
+                      },
+                      isWinningSquare(position) && styles.winningCell,
+                    ]}
+                    onPress={() => claimSquare(position)}
+                    activeOpacity={0.7}
+                  >
+                    {square.claimed && (
+                      <Text style={styles.cellText} numberOfLines={1}>
+                        {(square.player_name || '').substring(0, 3)}
                       </Text>
-                    </View>
-                    {/* Grid Cells */}
-                    {Array.from({ length: 10 }).map((_, col) => {
-                      const position = row * 10 + col;
-                      const square = game.squares[position];
-                      const winningQuarters = getWinningQuarters(position);
-                      return (
-                        <TouchableOpacity
-                          key={`cell-${position}`}
-                          style={[
-                            styles.cell,
-                            { 
-                              width: CELL_SIZE, 
-                              height: CELL_SIZE,
-                              backgroundColor: getSquareColor(square, position),
-                            },
-                            isWinningSquare(position) && styles.winningCell,
-                          ]}
-                          onPress={() => claimSquare(position)}
-                          activeOpacity={0.7}
-                        >
-                          {square.claimed && (
-                            <Text style={styles.cellText} numberOfLines={1}>
-                              {(square.player_name || '').substring(0, 3)}
-                            </Text>
-                          )}
-                          {winningQuarters.length > 0 && (
-                            <View style={styles.winnerBadge}>
-                              <Text style={styles.winnerBadgeText}>
-                                Q{winningQuarters.join(',')}
-                              </Text>
-                            </View>
+                    )}
+                    {winningQuarters.length > 0 && (
+                      <View style={styles.winnerBadge}>
+                        <Text style={styles.winnerBadgeText}>
+                          Q{winningQuarters.join(',')}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
+
+          {/* Bottom Team Label (Left Team - Vertical) */}
+          <View style={styles.bottomLabelRow}>
+            <Text style={styles.teamLabelV} numberOfLines={1}>{game.team_vertical}</Text>
+          </View>
+        </View>
                           )}
                         </TouchableOpacity>
                       );
