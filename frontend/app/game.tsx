@@ -1576,6 +1576,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 2,
+    height: CELL_SIZE * 10,
   },
   numbersRow: {
     flexDirection: 'row',
