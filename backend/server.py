@@ -620,6 +620,60 @@ async def start_draft(code: str, request: StartDraftRequest):
     
     return updated_game
 
+@api_router.post("/games/{code}/skip-turn")
+async def skip_turn(code: str):
+    """Skip to the next player's turn (host only)"""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    if game.get('board_locked', False):
+        raise HTTPException(status_code=400, detail="Board is already locked")
+    
+    # Calculate next turn
+    current_turn = game.get('current_turn', 0)
+    draft_direction = game.get('draft_direction', 1)
+    draft_style = game.get('draft_style', 'snake')
+    player_order = game.get('player_order', game.get('players', []))
+    
+    if draft_style == 'snake':
+        # Snake draft logic
+        next_turn = current_turn + draft_direction
+        # Check if we need to reverse direction
+        if next_turn >= len(player_order):
+            draft_direction = -1
+            next_turn = len(player_order) - 1
+        elif next_turn < 0:
+            draft_direction = 1
+            next_turn = 0
+        current_turn = next_turn
+    else:
+        # Standard draft - just cycle through
+        current_turn = (current_turn + 1) % len(player_order) if player_order else 0
+    
+    await db.games.update_one(
+        {"code": code.upper()},
+        {
+            "$set": {
+                "current_turn": current_turn,
+                "picks_this_turn": 0,
+                "draft_direction": draft_direction
+            }
+        }
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    # Emit socket event
+    await sio.emit('turn_skipped', {
+        'current_turn': current_turn,
+        'picks_this_turn': 0,
+        'draft_direction': draft_direction
+    }, room=code.upper())
+    
+    return updated_game
+
 @api_router.post("/games/{code}/undo")
 async def undo_last_claim(code: str):
     """Undo the last square claim (host only)"""
