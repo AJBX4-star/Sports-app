@@ -23,6 +23,8 @@ export default function CreateGameScreen() {
   const [teamHorizontal, setTeamHorizontal] = useState('');
   const [teamVertical, setTeamVertical] = useState('');
   const [hostName, setHostName] = useState('');
+  const [picksPerTurn, setPicksPerTurn] = useState('1');
+  const [draftStyle, setDraftStyle] = useState<'snake' | 'standard'>('snake');
   const [loading, setLoading] = useState(false);
 
   const createGame = async () => {
@@ -45,6 +47,8 @@ export default function CreateGameScreen() {
           host_name: hostName.trim(),
           team_horizontal: teamHorizontal.trim() || 'Team A',
           team_vertical: teamVertical.trim() || 'Team B',
+          picks_per_turn: parseInt(picksPerTurn) || 1,
+          draft_style: draftStyle,
         }),
       });
 
@@ -83,12 +87,13 @@ export default function CreateGameScreen() {
           </TouchableOpacity>
 
           <View style={styles.header}>
-            <Ionicons name="add-circle" size={60} color="#4CAF50" />
-            <Text style={styles.title}>Create Game</Text>
+            <Ionicons name="american-football" size={50} color="#4CAF50" />
+            <Text style={styles.title}>Host Game</Text>
             <Text style={styles.subtitle}>Set up your sports squares game</Text>
           </View>
 
           <View style={styles.form}>
+            {/* Host Name */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Your Name *</Text>
               <TextInput
@@ -98,6 +103,12 @@ export default function CreateGameScreen() {
                 placeholder="Enter your name"
                 placeholderTextColor="#666"
               />
+            </View>
+
+            {/* Team Names */}
+            <View style={styles.sectionHeader}>
+              <Ionicons name="people" size={20} color="#4CAF50" />
+              <Text style={styles.sectionTitle}>Team Names</Text>
             </View>
 
             <View style={styles.inputGroup}>
@@ -122,6 +133,76 @@ export default function CreateGameScreen() {
               />
             </View>
 
+            {/* Draft Settings */}
+            <View style={styles.sectionHeader}>
+              <Ionicons name="settings" size={20} color="#4CAF50" />
+              <Text style={styles.sectionTitle}>Draft Settings</Text>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Picks Per Turn</Text>
+              <Text style={styles.labelHint}>How many squares can each player pick per turn?</Text>
+              <View style={styles.picksRow}>
+                {['1', '2', '3', '5', '10'].map((num) => (
+                  <TouchableOpacity
+                    key={num}
+                    style={[
+                      styles.pickOption,
+                      picksPerTurn === num && styles.pickOptionSelected,
+                    ]}
+                    onPress={() => setPicksPerTurn(num)}
+                  >
+                    <Text style={[
+                      styles.pickOptionText,
+                      picksPerTurn === num && styles.pickOptionTextSelected,
+                    ]}>{num}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Draft Style</Text>
+              <Text style={styles.labelHint}>Snake reverses order each round</Text>
+              <View style={styles.draftRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.draftOption,
+                    draftStyle === 'snake' && styles.draftOptionSelected,
+                  ]}
+                  onPress={() => setDraftStyle('snake')}
+                >
+                  <Ionicons 
+                    name="swap-horizontal" 
+                    size={20} 
+                    color={draftStyle === 'snake' ? '#fff' : '#888'} 
+                  />
+                  <Text style={[
+                    styles.draftOptionText,
+                    draftStyle === 'snake' && styles.draftOptionTextSelected,
+                  ]}>Snake Draft</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.draftOption,
+                    draftStyle === 'standard' && styles.draftOptionSelected,
+                  ]}
+                  onPress={() => setDraftStyle('standard')}
+                >
+                  <Ionicons 
+                    name="repeat" 
+                    size={20} 
+                    color={draftStyle === 'standard' ? '#fff' : '#888'} 
+                  />
+                  <Text style={[
+                    styles.draftOptionText,
+                    draftStyle === 'standard' && styles.draftOptionTextSelected,
+                  ]}>Standard</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             <TouchableOpacity
               style={[styles.createButton, loading && styles.disabledButton]}
               onPress={createGame}
@@ -136,6 +217,10 @@ export default function CreateGameScreen() {
                 </>
               )}
             </TouchableOpacity>
+
+            <Text style={styles.noteText}>
+              You can randomize or set the player order after everyone joins.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -157,7 +242,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 28,
   },
   title: {
     fontSize: 32,
@@ -171,34 +256,104 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   form: {
-    gap: 20,
+    gap: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
   inputGroup: {
-    gap: 8,
+    gap: 6,
   },
   label: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#fff',
     fontWeight: '500',
   },
+  labelHint: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 4,
+  },
   input: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 10,
+    padding: 14,
     fontSize: 16,
     color: '#fff',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  picksRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  pickOption: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  pickOptionSelected: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#fff',
+  },
+  pickOptionText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  pickOptionTextSelected: {
+    color: '#fff',
+  },
+  draftRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  draftOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  draftOptionSelected: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#fff',
+  },
+  draftOptionText: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  draftOptionTextSelected: {
+    color: '#fff',
   },
   createButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#4CAF50',
-    paddingVertical: 18,
+    paddingVertical: 16,
     borderRadius: 12,
     gap: 12,
-    marginTop: 16,
+    marginTop: 12,
   },
   disabledButton: {
     opacity: 0.6,
@@ -207,5 +362,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  noteText: {
+    color: '#888',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
   },
 });
