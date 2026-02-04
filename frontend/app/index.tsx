@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Sports themed background image - custom uploaded
-const HERO_IMAGE = 'https://customer-assets.emergentagent.com/job_cb4bc686-45b4-4b55-88b9-d536262f5867/artifacts/9r26tkv1_file_00000000822071f59ca6b659977aec3e.png';
+const HERO_IMAGE = 'https://customer-assets.emergentagent.com/job_6e1df73e-25d2-4f8e-bae0-a8029b2b9c4b/artifacts/6l9s6wqc_file_00000000fec8722f8b0dccf0e21824a4.png';
 
 export default function HomeScreen() {
   const router = useRouter();
