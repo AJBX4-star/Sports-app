@@ -12,6 +12,7 @@ import {
   Share,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +57,10 @@ interface GameInfo {
   hostId: string | null;
 }
 
+// Cell size calculation - fit 10 cells plus labels
+const CELL_SIZE = Math.floor((SCREEN_WIDTH - 60) / 11);
+const LABEL_SIZE = CELL_SIZE;
+
 export default function GameScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
@@ -67,12 +72,10 @@ export default function GameScreen() {
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [editTeamH, setEditTeamH] = useState('');
   const [editTeamV, setEditTeamV] = useState('');
-
-  // Calculate grid size based on screen - make sure all 10x10 fits
-  const gridPadding = 8;
-  const labelSize = 30;
-  const availableWidth = SCREEN_WIDTH - (gridPadding * 2) - labelSize - 10;
-  const cellSize = Math.floor(availableWidth / 10);
+  const [showWinnerInput, setShowWinnerInput] = useState(false);
+  const [selectedQuarter, setSelectedQuarter] = useState(1);
+  const [scoreH, setScoreH] = useState('');
+  const [scoreV, setScoreV] = useState('');
 
   // Load game info and connect to socket
   useEffect(() => {
@@ -221,78 +224,42 @@ export default function GameScreen() {
     );
   };
 
-  const selectWinner = async (quarter: number) => {
+  const openWinnerSelection = (quarter: number) => {
     if (!game || !game.numbers_randomized) {
       Alert.alert('Numbers Not Set', 'Please randomize numbers first');
       return;
     }
-
-    Alert.alert(
-      `Select Q${quarter} Winner`,
-      'Enter the score to find the winning square',
-      [
-        {
-          text: 'Enter Scores',
-          onPress: () => {
-            // Show score input modal
-            showScoreInput(quarter);
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    setSelectedQuarter(quarter);
+    setScoreH('');
+    setScoreV('');
+    setShowWinnerInput(true);
+    setShowHostMenu(false);
   };
 
-  const showScoreInput = (quarter: number) => {
-    Alert.prompt(
-      `${game?.team_horizontal} Score`,
-      'Enter the last digit of the score (0-9)',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Next',
-          onPress: (hScore) => {
-            const h = parseInt(hScore || '0') % 10;
-            Alert.prompt(
-              `${game?.team_vertical} Score`,
-              'Enter the last digit of the score (0-9)',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Find Winner',
-                  onPress: async (vScore) => {
-                    const v = parseInt(vScore || '0') % 10;
-                    // Find the position
-                    if (game?.numbers_top && game?.numbers_left) {
-                      const col = game.numbers_top.indexOf(h);
-                      const row = game.numbers_left.indexOf(v);
-                      if (col !== -1 && row !== -1) {
-                        const position = row * 10 + col;
-                        await setWinnerPosition(quarter, position);
-                      }
-                    }
-                  },
-                },
-              ],
-              'plain-text'
-            );
-          },
-        },
-      ],
-      'plain-text'
-    );
-  };
-
-  const setWinnerPosition = async (quarter: number, position: number) => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/games/${code}/winner`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quarter, position }),
-      });
-      if (!response.ok) throw new Error('Failed to set winner');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to set winner');
+  const findAndSetWinner = async () => {
+    if (!game || !game.numbers_top || !game.numbers_left) return;
+    
+    const h = parseInt(scoreH || '0') % 10;
+    const v = parseInt(scoreV || '0') % 10;
+    
+    const col = game.numbers_top.indexOf(h);
+    const row = game.numbers_left.indexOf(v);
+    
+    if (col !== -1 && row !== -1) {
+      const position = row * 10 + col;
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/games/${code}/winner`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ quarter: selectedQuarter, position }),
+        });
+        if (!response.ok) throw new Error('Failed to set winner');
+        setShowWinnerInput(false);
+      } catch (error) {
+        Alert.alert('Error', 'Failed to set winner');
+      }
+    } else {
+      Alert.alert('Error', 'Invalid scores');
     }
   };
 
@@ -334,12 +301,11 @@ export default function GameScreen() {
   const getSquareColor = (square: Square, position: number) => {
     if (isWinningSquare(position)) return '#4CAF50';
     if (square.claimed) {
-      // Generate a color based on player name
       const colors = ['#E91E63', '#9C27B0', '#3F51B5', '#00BCD4', '#FF9800', '#795548', '#607D8B', '#F44336', '#2196F3', '#FFEB3B'];
       const index = game?.players.indexOf(square.player_name || '') || 0;
       return colors[index % colors.length];
     }
-    return 'rgba(255,255,255,0.1)';
+    return 'rgba(255,255,255,0.08)';
   };
 
   const getCurrentTurnPlayer = () => {
@@ -368,6 +334,9 @@ export default function GameScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Text style={styles.errorText}>Game not found</Text>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>Go Back</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -383,15 +352,15 @@ export default function GameScreen() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.gameCode}>Code: {code}</Text>
-            <Text style={styles.playerCount}>{game.players.length} players</Text>
+            <Text style={styles.playerCount}>{game.players.length} player{game.players.length !== 1 ? 's' : ''}</Text>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity onPress={shareGame} style={styles.headerButton}>
-              <Ionicons name="share" size={24} color="#fff" />
+              <Ionicons name="share-outline" size={24} color="#fff" />
             </TouchableOpacity>
             {gameInfo?.isHost && (
               <TouchableOpacity onPress={() => setShowHostMenu(true)} style={styles.headerButton}>
-                <Ionicons name="settings" size={24} color="#fff" />
+                <Ionicons name="settings-outline" size={24} color="#fff" />
               </TouchableOpacity>
             )}
           </View>
@@ -404,87 +373,89 @@ export default function GameScreen() {
               ? `${getCurrentTurnPlayer()}'s Turn` 
               : 'All squares claimed!'}
           </Text>
-          <Text style={styles.claimedText}>{getClaimedCount()}/100 squares claimed</Text>
+          <Text style={styles.claimedText}>{getClaimedCount()}/100 claimed</Text>
         </View>
 
-        {/* Grid Container */}
-        <View style={styles.gridContainer}>
-          {/* Top Team Label */}
-          <View style={[styles.teamLabelTop, { marginLeft: labelSize }]}>
-            <TouchableOpacity onPress={() => gameInfo?.isHost && (setEditTeamH(game.team_horizontal), setEditTeamV(game.team_vertical), setShowTeamModal(true))}>
-              <Text style={styles.teamLabel} numberOfLines={1}>{game.team_horizontal}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Numbers Row */}
-          <View style={styles.numbersRow}>
-            <View style={[styles.cornerCell, { width: labelSize, height: labelSize }]} />
-            {Array.from({ length: 10 }).map((_, i) => (
-              <View key={`top-${i}`} style={[styles.numberCell, { width: cellSize, height: labelSize }]}>
-                <Text style={styles.numberText}>
-                  {game.numbers_randomized && game.numbers_top ? game.numbers_top[i] : '?'}
-                </Text>
+        {/* Grid */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gridScroll}>
+          <View style={styles.gridWrapper}>
+            {/* Top Team Label */}
+            <View style={styles.topLabelRow}>
+              <View style={{ width: LABEL_SIZE }} />
+              <View style={styles.teamLabelContainer}>
+                <Text style={styles.teamLabelH} numberOfLines={1}>{game.team_horizontal}</Text>
               </View>
-            ))}
-          </View>
-
-          {/* Grid with Left Labels */}
-          <View style={styles.gridRow}>
-            {/* Left Team Label */}
-            <View style={[styles.teamLabelLeft, { width: labelSize }]}>
-              <TouchableOpacity onPress={() => gameInfo?.isHost && (setEditTeamH(game.team_horizontal), setEditTeamV(game.team_vertical), setShowTeamModal(true))}>
-                <Text style={[styles.teamLabel, styles.verticalText]} numberOfLines={1}>
-                  {game.team_vertical}
-                </Text>
-              </TouchableOpacity>
             </View>
 
-            {/* Numbers Column + Grid */}
-            <View>
-              {Array.from({ length: 10 }).map((_, row) => (
-                <View key={`row-${row}`} style={styles.row}>
-                  <View style={[styles.numberCell, { width: labelSize, height: cellSize }]}>
-                    <Text style={styles.numberText}>
-                      {game.numbers_randomized && game.numbers_left ? game.numbers_left[row] : '?'}
-                    </Text>
-                  </View>
-                  {Array.from({ length: 10 }).map((_, col) => {
-                    const position = row * 10 + col;
-                    const square = game.squares[position];
-                    const winningQuarters = getWinningQuarters(position);
-                    return (
-                      <TouchableOpacity
-                        key={`cell-${position}`}
-                        style={[
-                          styles.cell,
-                          { 
-                            width: cellSize, 
-                            height: cellSize,
-                            backgroundColor: getSquareColor(square, position),
-                          },
-                          isWinningSquare(position) && styles.winningCell,
-                        ]}
-                        onPress={() => claimSquare(position)}
-                        activeOpacity={0.7}
-                      >
-                        {square.claimed && (
-                          <Text style={styles.cellText} numberOfLines={1}>
-                            {square.player_name?.substring(0, 3)}
-                          </Text>
-                        )}
-                        {winningQuarters.length > 0 && (
-                          <Text style={styles.winnerBadge}>
-                            Q{winningQuarters.join(',')}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+            {/* Numbers Row (Top) */}
+            <View style={styles.numbersRow}>
+              <View style={[styles.cornerCell, { width: LABEL_SIZE, height: LABEL_SIZE }]} />
+              {Array.from({ length: 10 }).map((_, i) => (
+                <View key={`top-${i}`} style={[styles.numberCell, { width: CELL_SIZE, height: LABEL_SIZE }]}>
+                  <Text style={styles.numberText}>
+                    {game.numbers_randomized && game.numbers_top ? game.numbers_top[i] : '?'}
+                  </Text>
                 </View>
               ))}
             </View>
+
+            {/* Grid Rows */}
+            <View style={styles.gridBody}>
+              {/* Left Team Label */}
+              <View style={styles.leftLabelContainer}>
+                <Text style={styles.teamLabelV} numberOfLines={1}>{game.team_vertical}</Text>
+              </View>
+              
+              <View style={styles.gridMain}>
+                {Array.from({ length: 10 }).map((_, row) => (
+                  <View key={`row-${row}`} style={styles.gridRow}>
+                    {/* Left Number */}
+                    <View style={[styles.numberCell, { width: LABEL_SIZE, height: CELL_SIZE }]}>
+                      <Text style={styles.numberText}>
+                        {game.numbers_randomized && game.numbers_left ? game.numbers_left[row] : '?'}
+                      </Text>
+                    </View>
+                    {/* Grid Cells */}
+                    {Array.from({ length: 10 }).map((_, col) => {
+                      const position = row * 10 + col;
+                      const square = game.squares[position];
+                      const winningQuarters = getWinningQuarters(position);
+                      return (
+                        <TouchableOpacity
+                          key={`cell-${position}`}
+                          style={[
+                            styles.cell,
+                            { 
+                              width: CELL_SIZE, 
+                              height: CELL_SIZE,
+                              backgroundColor: getSquareColor(square, position),
+                            },
+                            isWinningSquare(position) && styles.winningCell,
+                          ]}
+                          onPress={() => claimSquare(position)}
+                          activeOpacity={0.7}
+                        >
+                          {square.claimed && (
+                            <Text style={styles.cellText} numberOfLines={1}>
+                              {(square.player_name || '').substring(0, 3)}
+                            </Text>
+                          )}
+                          {winningQuarters.length > 0 && (
+                            <View style={styles.winnerBadge}>
+                              <Text style={styles.winnerBadgeText}>
+                                Q{winningQuarters.join(',')}
+                              </Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            </View>
           </View>
-        </View>
+        </ScrollView>
 
         {/* Players List */}
         <View style={styles.playersSection}>
@@ -503,7 +474,7 @@ export default function GameScreen() {
                   ]}
                 >
                   <Text style={styles.playerChipText}>{player}</Text>
-                  {isCurrentTurn && <Ionicons name="arrow-forward" size={14} color="#fff" />}
+                  {isCurrentTurn && <Ionicons name="chevron-forward" size={14} color="#fff" />}
                 </View>
               );
             })}
@@ -516,7 +487,9 @@ export default function GameScreen() {
             <Text style={styles.sectionTitle}>Winners</Text>
             {game.winners.map((winner) => (
               <View key={winner.quarter} style={styles.winnerRow}>
-                <Text style={styles.winnerQuarter}>Q{winner.quarter}</Text>
+                <View style={styles.winnerQuarterBadge}>
+                  <Text style={styles.winnerQuarterText}>Q{winner.quarter}</Text>
+                </View>
                 <Text style={styles.winnerName}>{winner.player_name || 'Unclaimed'}</Text>
               </View>
             ))}
@@ -545,7 +518,7 @@ export default function GameScreen() {
             >
               <Ionicons name="shuffle" size={24} color="#fff" />
               <Text style={styles.modalButtonText}>
-                {game.numbers_randomized ? 'Numbers Already Set' : 'Randomize Numbers'}
+                {game.numbers_randomized ? 'Numbers Set' : 'Randomize Numbers'}
               </Text>
             </TouchableOpacity>
 
@@ -558,7 +531,7 @@ export default function GameScreen() {
                 setShowTeamModal(true);
               }}
             >
-              <Ionicons name="create" size={24} color="#fff" />
+              <Ionicons name="create-outline" size={24} color="#fff" />
               <Text style={styles.modalButtonText}>Edit Team Names</Text>
             </TouchableOpacity>
 
@@ -571,10 +544,7 @@ export default function GameScreen() {
                     styles.quarterButton,
                     game.winners.find(w => w.quarter === q) && styles.quarterButtonActive,
                   ]}
-                  onPress={() => {
-                    setShowHostMenu(false);
-                    selectWinner(q);
-                  }}
+                  onPress={() => openWinnerSelection(q)}
                 >
                   <Text style={styles.quarterButtonText}>Q{q}</Text>
                 </TouchableOpacity>
@@ -637,6 +607,59 @@ export default function GameScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Winner Selection Modal */}
+      <Modal
+        visible={showWinnerInput}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowWinnerInput(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Set Q{selectedQuarter} Winner</Text>
+            <Text style={styles.modalSubtitle}>Enter the last digit of each team's score</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{game.team_horizontal} Score (last digit)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={scoreH}
+                onChangeText={setScoreH}
+                placeholder="0-9"
+                placeholderTextColor="#666"
+                keyboardType="number-pad"
+                maxLength={1}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{game.team_vertical} Score (last digit)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={scoreV}
+                onChangeText={setScoreV}
+                placeholder="0-9"
+                placeholderTextColor="#666"
+                keyboardType="number-pad"
+                maxLength={1}
+              />
+            </View>
+
+            <TouchableOpacity style={styles.saveButton} onPress={findAndSetWinner}>
+              <Ionicons name="trophy" size={20} color="#fff" />
+              <Text style={styles.saveButtonText}>Find Winner</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowWinnerInput(false)}
+            >
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -659,15 +682,27 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#f44336',
     fontSize: 18,
+    marginBottom: 16,
+  },
+  backBtn: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  backBtnText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   scrollContent: {
-    padding: 16,
+    padding: 12,
+    paddingBottom: 24,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   headerCenter: {
     alignItems: 'center',
@@ -690,72 +725,87 @@ const styles = StyleSheet.create({
   },
   turnIndicator: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    padding: 12,
+    padding: 10,
     borderRadius: 8,
-    marginBottom: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
   turnText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   claimedText: {
     color: '#888',
     fontSize: 14,
-    marginTop: 4,
   },
-  gridContainer: {
+  gridScroll: {
+    paddingBottom: 8,
+  },
+  gridWrapper: {
+    alignItems: 'flex-start',
+  },
+  topLabelRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  teamLabelContainer: {
+    width: CELL_SIZE * 10,
     alignItems: 'center',
-    marginBottom: 20,
   },
-  teamLabelTop: {
-    marginBottom: 8,
-  },
-  teamLabel: {
+  teamLabelH: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  teamLabelLeft: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 4,
-  },
-  verticalText: {
-    transform: [{ rotate: '-90deg' }],
-    width: 100,
   },
   numbersRow: {
-    flexDirection: 'row',
-  },
-  gridRow: {
-    flexDirection: 'row',
-  },
-  row: {
     flexDirection: 'row',
   },
   cornerCell: {
     backgroundColor: 'transparent',
   },
   numberCell: {
-    backgroundColor: 'rgba(76, 175, 80, 0.3)',
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   numberText: {
     color: '#4CAF50',
     fontWeight: 'bold',
+    fontSize: 12,
+  },
+  gridBody: {
+    flexDirection: 'row',
+  },
+  leftLabelContainer: {
+    width: LABEL_SIZE,
+    height: CELL_SIZE * 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  teamLabelV: {
+    color: '#fff',
     fontSize: 14,
+    fontWeight: 'bold',
+    transform: [{ rotate: '-90deg' }],
+    width: CELL_SIZE * 10,
+    textAlign: 'center',
+  },
+  gridMain: {
+    flexDirection: 'column',
+  },
+  gridRow: {
+    flexDirection: 'row',
   },
   cell: {
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   winningCell: {
     borderWidth: 2,
@@ -763,24 +813,30 @@ const styles = StyleSheet.create({
   },
   cellText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
   },
   winnerBadge: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: 'bold',
     position: 'absolute',
     bottom: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 2,
+    paddingHorizontal: 2,
+  },
+  winnerBadgeText: {
+    color: '#fff',
+    fontSize: 7,
+    fontWeight: 'bold',
   },
   playersSection: {
-    marginBottom: 20,
+    marginTop: 16,
+    marginBottom: 12,
   },
   sectionTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   playersList: {
     flexDirection: 'row',
@@ -802,78 +858,95 @@ const styles = StyleSheet.create({
   playerChipText: {
     color: '#fff',
     fontWeight: '500',
+    fontSize: 13,
   },
   winnersSection: {
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
   },
   winnerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
   },
-  winnerQuarter: {
-    color: '#4CAF50',
+  winnerQuarterBadge: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  winnerQuarterText: {
+    color: '#fff',
     fontWeight: 'bold',
-    fontSize: 16,
-    width: 40,
+    fontSize: 14,
   },
   winnerName: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
-    padding: 24,
+    padding: 20,
   },
   modalContent: {
     backgroundColor: '#1a1a2e',
     borderRadius: 16,
-    padding: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   modalTitle: {
     color: '#fff',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 24,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    color: '#888',
+    fontSize: 14,
+    marginBottom: 20,
     textAlign: 'center',
   },
   modalButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#4CAF50',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 10,
     gap: 12,
   },
   disabledButton: {
-    backgroundColor: '#666',
+    backgroundColor: '#444',
   },
   modalButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   quarterTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 12,
+    marginTop: 14,
+    marginBottom: 10,
   },
   quarterButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   quarterButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: 'transparent',
@@ -887,38 +960,43 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   closeButton: {
-    padding: 16,
+    padding: 14,
     alignItems: 'center',
   },
   closeButtonText: {
     color: '#888',
-    fontSize: 16,
+    fontSize: 15,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   inputLabel: {
     color: '#fff',
-    marginBottom: 8,
-    fontSize: 14,
+    marginBottom: 6,
+    fontSize: 13,
   },
   modalInput: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 8,
     padding: 12,
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   saveButton: {
     backgroundColor: '#4CAF50',
-    padding: 16,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 10,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   saveButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 });
