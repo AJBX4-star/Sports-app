@@ -276,6 +276,15 @@ async def claim_square(code: str, request: ClaimSquareRequest):
     claimed_count = sum(1 for s in squares if s.get('claimed', False))
     board_locked = claimed_count >= 100
     
+    # Store last claim for undo functionality
+    last_claim = {
+        'position': request.position,
+        'player_name': request.player_name,
+        'previous_turn': game.get('current_turn', 0),
+        'previous_picks': game.get('picks_this_turn', 0),
+        'previous_direction': game.get('draft_direction', 1)
+    }
+    
     await db.games.update_one(
         {"code": code.upper()},
         {
@@ -284,7 +293,8 @@ async def claim_square(code: str, request: ClaimSquareRequest):
                 "current_turn": current_turn,
                 "picks_this_turn": picks_this_turn,
                 "draft_direction": draft_direction,
-                "board_locked": board_locked
+                "board_locked": board_locked,
+                "last_claim": last_claim
             }
         }
     )
