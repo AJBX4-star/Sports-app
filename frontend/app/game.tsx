@@ -57,6 +57,9 @@ interface Game {
   draft_direction: number;
   board_locked: boolean;
   draft_started: boolean;
+  score_horizontal: number;
+  score_vertical: number;
+  last_claim: { position: number; player_name: string } | null;
 }
 
 interface GameInfo {
