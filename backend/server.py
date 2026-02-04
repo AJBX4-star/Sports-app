@@ -44,8 +44,10 @@ logger = logging.getLogger(__name__)
 # Define Models
 class Square(BaseModel):
     position: int  # 0-99
+    number: int  # 1-100 display number
     player_name: Optional[str] = None
     claimed: bool = False
+    locked: bool = False  # Once claimed, square is locked
 
 class Winner(BaseModel):
     quarter: int  # 1-4
@@ -56,9 +58,10 @@ class Game(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     code: str = Field(default_factory=lambda: ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=6)))
     host_id: str
+    host_name: str = ""
     team_horizontal: str = "Team A"
     team_vertical: str = "Team B"
-    squares: List[Square] = Field(default_factory=lambda: [Square(position=i) for i in range(100)])
+    squares: List[Square] = Field(default_factory=lambda: [Square(position=i, number=i+1) for i in range(100)])
     numbers_top: Optional[List[int]] = None  # 0-9 randomized
     numbers_left: Optional[List[int]] = None  # 0-9 randomized
     numbers_randomized: bool = False
@@ -67,7 +70,14 @@ class Game(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     current_turn: int = 0  # Index of whose turn it is
     players: List[str] = Field(default_factory=list)  # List of player names
+    player_order: List[str] = Field(default_factory=list)  # Order for snake draft
     is_active: bool = True
+    picks_per_turn: int = 1  # Number of squares a player can pick per turn
+    picks_this_turn: int = 0  # Track picks in current turn
+    draft_style: str = "snake"  # "snake" or "standard" or "custom"
+    draft_direction: int = 1  # 1 for forward, -1 for backward (snake draft)
+    board_locked: bool = False  # Lock board when all squares claimed
+    draft_started: bool = False  # Has the draft started
 
 class CreateGameRequest(BaseModel):
     host_id: str
@@ -75,6 +85,8 @@ class CreateGameRequest(BaseModel):
     team_horizontal: Optional[str] = "Team A"
     team_vertical: Optional[str] = "Team B"
     randomize_time: Optional[str] = None
+    picks_per_turn: Optional[int] = 1
+    draft_style: Optional[str] = "snake"  # "snake", "standard", "custom"
 
 class JoinGameRequest(BaseModel):
     code: str
@@ -83,6 +95,12 @@ class JoinGameRequest(BaseModel):
 class ClaimSquareRequest(BaseModel):
     position: int
     player_name: str
+    claimed_by_host: bool = False  # If host is claiming for someone
+
+class HostClaimRequest(BaseModel):
+    position: int
+    player_name: Optional[str] = None  # None means unclaimed/host marking
+    as_unclaimed: bool = False  # Mark as unclaimed spot
 
 class SetWinnerRequest(BaseModel):
     quarter: int
@@ -91,6 +109,17 @@ class SetWinnerRequest(BaseModel):
 class UpdateTeamsRequest(BaseModel):
     team_horizontal: str
     team_vertical: str
+
+class UpdateSettingsRequest(BaseModel):
+    picks_per_turn: Optional[int] = None
+    draft_style: Optional[str] = None
+
+class SetPlayerOrderRequest(BaseModel):
+    player_order: List[str]
+    randomize: bool = False
+
+class StartDraftRequest(BaseModel):
+    randomize_order: bool = False
 
 # API Routes
 @api_router.get("/")
@@ -102,10 +131,14 @@ async def create_game(request: CreateGameRequest):
     """Create a new game"""
     game = Game(
         host_id=request.host_id,
+        host_name=request.host_name,
         team_horizontal=request.team_horizontal or "Team A",
         team_vertical=request.team_vertical or "Team B",
         randomize_time=request.randomize_time,
-        players=[request.host_name]
+        players=[request.host_name],
+        player_order=[request.host_name],
+        picks_per_turn=request.picks_per_turn or 1,
+        draft_style=request.draft_style or "snake"
     )
     game_dict = game.model_dump()
     game_dict['created_at'] = game.created_at.isoformat()
@@ -133,10 +166,15 @@ async def join_game(code: str, request: JoinGameRequest):
         game.pop('_id', None)
         return game
     
-    # Add player to the game
+    # Add player to the game and player order
     await db.games.update_one(
         {"code": code.upper()},
-        {"$push": {"players": request.player_name}}
+        {
+            "$push": {
+                "players": request.player_name,
+                "player_order": request.player_name
+            }
+        }
     )
     
     updated_game = await db.games.find_one({"code": code.upper()})
@@ -145,7 +183,8 @@ async def join_game(code: str, request: JoinGameRequest):
     # Emit socket event for player joined
     await sio.emit('player_joined', {
         'player_name': request.player_name,
-        'players': updated_game.get('players', [])
+        'players': updated_game.get('players', []),
+        'player_order': updated_game.get('player_order', [])
     }, room=code.upper())
     
     return updated_game
@@ -157,31 +196,76 @@ async def claim_square(code: str, request: ClaimSquareRequest):
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
     
+    # Check if board is locked
+    if game.get('board_locked', False):
+        raise HTTPException(status_code=400, detail="Board is locked")
+    
     squares = game.get('squares', [])
     if request.position < 0 or request.position >= 100:
         raise HTTPException(status_code=400, detail="Invalid position")
     
-    if squares[request.position].get('claimed', False):
+    # Check if square is already claimed/locked
+    if squares[request.position].get('claimed', False) or squares[request.position].get('locked', False):
         raise HTTPException(status_code=400, detail="Square already claimed")
     
-    # Update the square
+    # Check if it's this player's turn (unless host is claiming for them)
+    if not request.claimed_by_host:
+        player_order = game.get('player_order', game.get('players', []))
+        current_turn = game.get('current_turn', 0)
+        if player_order and len(player_order) > 0:
+            current_player = player_order[current_turn % len(player_order)]
+            if current_player != request.player_name:
+                raise HTTPException(status_code=400, detail=f"It's {current_player}'s turn")
+    
+    # Update the square - lock it immediately
     squares[request.position] = {
         'position': request.position,
+        'number': request.position + 1,
         'player_name': request.player_name,
-        'claimed': True
+        'claimed': True,
+        'locked': True
     }
     
-    # Move to next turn
-    players = game.get('players', [])
+    # Handle turn progression
+    picks_per_turn = game.get('picks_per_turn', 1)
+    picks_this_turn = game.get('picks_this_turn', 0) + 1
     current_turn = game.get('current_turn', 0)
-    next_turn = (current_turn + 1) % len(players) if players else 0
+    draft_direction = game.get('draft_direction', 1)
+    draft_style = game.get('draft_style', 'snake')
+    player_order = game.get('player_order', game.get('players', []))
+    
+    # Check if player has made all their picks for this turn
+    if picks_this_turn >= picks_per_turn:
+        picks_this_turn = 0
+        
+        if draft_style == 'snake':
+            # Snake draft logic
+            next_turn = current_turn + draft_direction
+            # Check if we need to reverse direction
+            if next_turn >= len(player_order):
+                draft_direction = -1
+                next_turn = len(player_order) - 1
+            elif next_turn < 0:
+                draft_direction = 1
+                next_turn = 0
+            current_turn = next_turn
+        else:
+            # Standard draft - just cycle through
+            current_turn = (current_turn + 1) % len(player_order) if player_order else 0
+    
+    # Check if all squares are claimed
+    claimed_count = sum(1 for s in squares if s.get('claimed', False))
+    board_locked = claimed_count >= 100
     
     await db.games.update_one(
         {"code": code.upper()},
         {
             "$set": {
                 "squares": squares,
-                "current_turn": next_turn
+                "current_turn": current_turn,
+                "picks_this_turn": picks_this_turn,
+                "draft_direction": draft_direction,
+                "board_locked": board_locked
             }
         }
     )
@@ -194,17 +278,85 @@ async def claim_square(code: str, request: ClaimSquareRequest):
         'position': request.position,
         'player_name': request.player_name,
         'squares': updated_game.get('squares', []),
-        'current_turn': next_turn
+        'current_turn': current_turn,
+        'picks_this_turn': picks_this_turn,
+        'board_locked': board_locked
+    }, room=code.upper())
+    
+    return updated_game
+
+@api_router.post("/games/{code}/host-claim")
+async def host_claim_square(code: str, request: HostClaimRequest):
+    """Host claims a square for another player or marks as unclaimed"""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    squares = game.get('squares', [])
+    if request.position < 0 or request.position >= 100:
+        raise HTTPException(status_code=400, detail="Invalid position")
+    
+    # Check if square is already claimed/locked
+    if squares[request.position].get('claimed', False) or squares[request.position].get('locked', False):
+        raise HTTPException(status_code=400, detail="Square already claimed")
+    
+    # Update the square
+    if request.as_unclaimed:
+        # Mark as unclaimed but locked (reserved spot)
+        squares[request.position] = {
+            'position': request.position,
+            'number': request.position + 1,
+            'player_name': None,
+            'claimed': True,
+            'locked': True
+        }
+    else:
+        # Claim for specific player
+        squares[request.position] = {
+            'position': request.position,
+            'number': request.position + 1,
+            'player_name': request.player_name,
+            'claimed': True,
+            'locked': True
+        }
+    
+    # Check if all squares are claimed
+    claimed_count = sum(1 for s in squares if s.get('claimed', False))
+    board_locked = claimed_count >= 100
+    
+    await db.games.update_one(
+        {"code": code.upper()},
+        {
+            "$set": {
+                "squares": squares,
+                "board_locked": board_locked
+            }
+        }
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    # Emit socket event
+    await sio.emit('square_claimed', {
+        'position': request.position,
+        'player_name': request.player_name,
+        'squares': updated_game.get('squares', []),
+        'board_locked': board_locked
     }, room=code.upper())
     
     return updated_game
 
 @api_router.post("/games/{code}/randomize")
 async def randomize_numbers(code: str):
-    """Randomize the numbers on axes"""
+    """Randomize the numbers on axes - only allowed when board is locked"""
     game = await db.games.find_one({"code": code.upper()})
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
+    
+    # Check if board is locked (all squares claimed)
+    if not game.get('board_locked', False):
+        raise HTTPException(status_code=400, detail="Board must be locked (all squares claimed) before randomizing numbers")
     
     numbers_top = list(range(10))
     numbers_left = list(range(10))
@@ -297,6 +449,100 @@ async def update_teams(code: str, request: UpdateTeamsRequest):
     await sio.emit('teams_updated', {
         'team_horizontal': request.team_horizontal,
         'team_vertical': request.team_vertical
+    }, room=code.upper())
+    
+    return updated_game
+
+@api_router.put("/games/{code}/settings")
+async def update_settings(code: str, request: UpdateSettingsRequest):
+    """Update game settings"""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    update_fields = {}
+    if request.picks_per_turn is not None:
+        update_fields['picks_per_turn'] = request.picks_per_turn
+    if request.draft_style is not None:
+        update_fields['draft_style'] = request.draft_style
+    
+    if update_fields:
+        await db.games.update_one(
+            {"code": code.upper()},
+            {"$set": update_fields}
+        )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    # Emit socket event
+    await sio.emit('settings_updated', update_fields, room=code.upper())
+    
+    return updated_game
+
+@api_router.put("/games/{code}/player-order")
+async def set_player_order(code: str, request: SetPlayerOrderRequest):
+    """Set or randomize player order"""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    if request.randomize:
+        # Randomize the current player list
+        players = game.get('players', []).copy()
+        random.shuffle(players)
+        player_order = players
+    else:
+        player_order = request.player_order
+    
+    await db.games.update_one(
+        {"code": code.upper()},
+        {"$set": {"player_order": player_order}}
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    # Emit socket event
+    await sio.emit('player_order_updated', {
+        'player_order': player_order
+    }, room=code.upper())
+    
+    return updated_game
+
+@api_router.post("/games/{code}/start-draft")
+async def start_draft(code: str, request: StartDraftRequest):
+    """Start the draft"""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    player_order = game.get('player_order', game.get('players', []))
+    
+    if request.randomize_order:
+        player_order = player_order.copy()
+        random.shuffle(player_order)
+    
+    await db.games.update_one(
+        {"code": code.upper()},
+        {
+            "$set": {
+                "draft_started": True,
+                "player_order": player_order,
+                "current_turn": 0,
+                "picks_this_turn": 0,
+                "draft_direction": 1
+            }
+        }
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    # Emit socket event
+    await sio.emit('draft_started', {
+        'player_order': player_order,
+        'current_turn': 0
     }, room=code.upper())
     
     return updated_game
