@@ -5,8 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Sports themed background image - custom uploaded
-const HERO_IMAGE = 'https://customer-assets.emergentagent.com/job_6e1df73e-25d2-4f8e-bae0-a8029b2b9c4b/artifacts/6l9s6wqc_file_00000000fec8722f8b0dccf0e21824a4.png';
+// Sports themed background image - from environment or fallback
+const HERO_IMAGE = process.env.EXPO_PUBLIC_HERO_IMAGE || 'https://customer-assets.emergentagent.com/job_6e1df73e-25d2-4f8e-bae0-a8029b2b9c4b/artifacts/6l9s6wqc_file_00000000fec8722f8b0dccf0e21824a4.png';
 
 export default function HomeScreen() {
   const router = useRouter();
