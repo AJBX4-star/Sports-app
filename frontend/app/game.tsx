@@ -183,6 +183,32 @@ export default function GameScreen() {
       } : null);
     });
 
+    newSocket.on('score_updated', (data) => {
+      setGame(prev => prev ? { 
+        ...prev, 
+        score_horizontal: data.score_horizontal, 
+        score_vertical: data.score_vertical 
+      } : null);
+    });
+
+    newSocket.on('square_unclaimed', (data) => {
+      setGame(prev => prev ? { 
+        ...prev, 
+        squares: data.squares, 
+        current_turn: data.current_turn,
+        last_claim: null
+      } : null);
+    });
+
+    newSocket.on('player_removed', (data) => {
+      setGame(prev => prev ? { 
+        ...prev, 
+        players: data.players,
+        player_order: data.player_order,
+        squares: data.squares
+      } : null);
+    });
+
     newSocket.on('player_order_updated', (data) => {
       setGame(prev => prev ? { ...prev, player_order: data.player_order } : null);
     });
