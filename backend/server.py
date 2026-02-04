@@ -413,7 +413,8 @@ async def host_claim_square(code: str, request: HostClaimRequest):
         'squares': updated_game.get('squares', []),
         'current_turn': current_turn,
         'picks_this_turn': picks_this_turn,
-        'board_locked': board_locked
+        'board_locked': board_locked,
+        'last_claim': last_claim
     }, room=code.upper())
     
     return updated_game
