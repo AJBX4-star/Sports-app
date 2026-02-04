@@ -66,9 +66,9 @@ interface GameInfo {
   hostId: string | null;
 }
 
-// Cell size calculation
-const CELL_SIZE = Math.floor((SCREEN_WIDTH - 50) / 11);
-const LABEL_SIZE = CELL_SIZE;
+// Cell size calculation - ensure grid fits on screen
+const CELL_SIZE = 30; // Fixed size that fits 10 + label
+const LABEL_SIZE = 28;
 
 export default function GameScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
