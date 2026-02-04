@@ -194,6 +194,10 @@ export default function GameScreen() {
         const error = await response.json();
         throw new Error(error.detail);
       }
+      
+      // Update local state immediately
+      const data = await response.json();
+      setGame(data);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to claim square');
     }
