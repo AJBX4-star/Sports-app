@@ -290,3 +290,5 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: "Sports Squares MVP complete. All features working: 10x10 grid, team names, square claiming, number randomization, winner selection with green highlighting"
+  - agent: "main"
+    message: "Completed UI refactor: Team B name now displays on left side of grid with rotated vertical text. Implemented polling-based real-time updates (every 3 seconds) as fallback since WebSocket through tunnel has connection issues. Added live winner highlighting styles (gold border for current winning square based on score)."
