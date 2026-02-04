@@ -126,6 +126,20 @@ class SetPlayerOrderRequest(BaseModel):
 class StartDraftRequest(BaseModel):
     randomize_order: bool = False
 
+class UndoClaimRequest(BaseModel):
+    position: int
+
+class AddPlayerRequest(BaseModel):
+    player_name: str
+
+class RemovePlayerRequest(BaseModel):
+    player_name: str
+    release_squares: bool = False  # Release their squares back to unclaimed
+
+class UpdateScoreRequest(BaseModel):
+    score_horizontal: int
+    score_vertical: int
+
 # API Routes
 @api_router.get("/")
 async def root():
