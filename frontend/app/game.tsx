@@ -1903,4 +1903,74 @@ const styles = StyleSheet.create({
   playerSelectTextActive: {
     color: '#fff',
   },
+  // New styles for additional features
+  undoButton: {
+    backgroundColor: '#FF9800',
+  },
+  scoreButton: {
+    backgroundColor: '#2196F3',
+  },
+  playerManageRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  halfButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 10,
+    gap: 8,
+  },
+  addPlayerBtn: {
+    backgroundColor: '#4CAF50',
+  },
+  removePlayerBtn: {
+    backgroundColor: '#f44336',
+  },
+  halfButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  playerRemoveList: {
+    maxHeight: 200,
+    marginBottom: 12,
+  },
+  playerRemoveItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    gap: 12,
+  },
+  playerRemoveItemSelected: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+    borderWidth: 1,
+    borderColor: '#f44336',
+  },
+  playerRemoveName: {
+    color: '#fff',
+    fontSize: 15,
+  },
+  releaseSquaresOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  releaseSquaresText: {
+    color: '#aaa',
+    fontSize: 14,
+  },
+  removeButton: {
+    backgroundColor: '#f44336',
+  },
 });
