@@ -1401,6 +1401,46 @@ const styles = StyleSheet.create({
     padding: 12,
     paddingBottom: 24,
   },
+  // Score Display
+  scoreDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
+    position: 'relative',
+  },
+  scoreTeam: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  scoreTeamName: {
+    color: '#aaa',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  scoreValue: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  scoreDivider: {
+    paddingHorizontal: 16,
+  },
+  scoreVs: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  scoreEditHint: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
