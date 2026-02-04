@@ -78,6 +78,11 @@ class Game(BaseModel):
     draft_direction: int = 1  # 1 for forward, -1 for backward (snake draft)
     board_locked: bool = False  # Lock board when all squares claimed
     draft_started: bool = False  # Has the draft started
+    # Live score tracking
+    score_horizontal: int = 0  # Score for horizontal team
+    score_vertical: int = 0  # Score for vertical team
+    # Undo history
+    last_claim: Optional[Dict] = None  # Last claimed square for undo
 
 class CreateGameRequest(BaseModel):
     host_id: str
