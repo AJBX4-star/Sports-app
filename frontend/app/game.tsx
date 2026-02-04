@@ -1676,6 +1676,23 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
   },
+  liveWinnerCell: {
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  liveWinnerBadge: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    backgroundColor: '#FFD700',
+    borderRadius: 4,
+    padding: 1,
+  },
   lockedCell: {
     opacity: 0.9,
   },
