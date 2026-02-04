@@ -558,6 +558,26 @@ export default function GameScreen() {
     }
   };
 
+  // Skip to next player's turn
+  const skipTurn = async () => {
+    if (!game) return;
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/skip-turn`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to skip turn');
+      }
+      const data = await response.json();
+      setGame({...data});
+      setShowHostMenu(false);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to skip turn');
+    }
+  };
+
   // Add player manually
   const addPlayer = async () => {
     if (!newPlayerName.trim()) return;
