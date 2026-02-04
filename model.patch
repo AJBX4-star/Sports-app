@@ -1,64 +1,69 @@
 diff --git a/model.patch b/model.patch
-index fa37082..e69de29 100644
+index fc91b4c..e69de29 100644
 --- a/model.patch
 +++ b/model.patch
-@@ -1,59 +0,0 @@
+@@ -1,64 +0,0 @@
 -diff --git a/model.patch b/model.patch
--index 55c4ebb..e69de29 100644
+-index fa37082..e69de29 100644
 ---- a/model.patch
 -+++ b/model.patch
--@@ -1,54 +0,0 @@
---diff --git a/backend/server.py b/backend/server.py
---index d0647c7..d828204 100644
------ a/backend/server.py
---+++ b/backend/server.py
---@@ -309,7 +309,8 @@ async def claim_square(code: str, request: ClaimSquareRequest):
---         'squares': updated_game.get('squares', []),
---         'current_turn': current_turn,
---         'picks_this_turn': picks_this_turn,
----        'board_locked': board_locked
---+        'board_locked': board_locked,
---+        'last_claim': last_claim
---     }, room=code.upper())
---     
---     return updated_game
---@@ -413,7 +414,8 @@ async def host_claim_square(code: str, request: HostClaimRequest):
---         'squares': updated_game.get('squares', []),
---         'current_turn': current_turn,
---         'picks_this_turn': picks_this_turn,
----        'board_locked': board_locked
---+        'board_locked': board_locked,
---+        'last_claim': last_claim
---     }, room=code.upper())
---     
---     return updated_game
+-@@ -1,59 +0,0 @@
 --diff --git a/model.patch b/model.patch
---index b307c6c..e69de29 100644
+--index 55c4ebb..e69de29 100644
 ----- a/model.patch
 --+++ b/model.patch
---@@ -1,25 +0,0 @@
----diff --git a/frontend/app/game.tsx b/frontend/app/game.tsx
----index 1e6a76c..c535f1e 100644
------- a/frontend/app/game.tsx
----+++ b/frontend/app/game.tsx
----@@ -1576,6 +1576,7 @@ const styles = StyleSheet.create({
----     justifyContent: 'center',
----     alignItems: 'center',
----     marginRight: 2,
----+    height: CELL_SIZE * 10,
----   },
----   numbersRow: {
----     flexDirection: 'row',
----@@ -1602,8 +1603,11 @@ const styles = StyleSheet.create({
----   },
----   teamLabelV: {
----     color: '#fff',
-----    fontSize: 14,
----+    fontSize: 12,
----     fontWeight: 'bold',
----+    transform: [{ rotate: '-90deg' }],
----+    width: CELL_SIZE * 10,
----+    textAlign: 'center',
----   },
----   gridRow: {
----     flexDirection: 'row',
+--@@ -1,54 +0,0 @@
+---diff --git a/backend/server.py b/backend/server.py
+---index d0647c7..d828204 100644
+------ a/backend/server.py
+---+++ b/backend/server.py
+---@@ -309,7 +309,8 @@ async def claim_square(code: str, request: ClaimSquareRequest):
+---         'squares': updated_game.get('squares', []),
+---         'current_turn': current_turn,
+---         'picks_this_turn': picks_this_turn,
+----        'board_locked': board_locked
+---+        'board_locked': board_locked,
+---+        'last_claim': last_claim
+---     }, room=code.upper())
+---     
+---     return updated_game
+---@@ -413,7 +414,8 @@ async def host_claim_square(code: str, request: HostClaimRequest):
+---         'squares': updated_game.get('squares', []),
+---         'current_turn': current_turn,
+---         'picks_this_turn': picks_this_turn,
+----        'board_locked': board_locked
+---+        'board_locked': board_locked,
+---+        'last_claim': last_claim
+---     }, room=code.upper())
+---     
+---     return updated_game
+---diff --git a/model.patch b/model.patch
+---index b307c6c..e69de29 100644
+------ a/model.patch
+---+++ b/model.patch
+---@@ -1,25 +0,0 @@
+----diff --git a/frontend/app/game.tsx b/frontend/app/game.tsx
+----index 1e6a76c..c535f1e 100644
+------- a/frontend/app/game.tsx
+----+++ b/frontend/app/game.tsx
+----@@ -1576,6 +1576,7 @@ const styles = StyleSheet.create({
+----     justifyContent: 'center',
+----     alignItems: 'center',
+----     marginRight: 2,
+----+    height: CELL_SIZE * 10,
+----   },
+----   numbersRow: {
+----     flexDirection: 'row',
+----@@ -1602,8 +1603,11 @@ const styles = StyleSheet.create({
+----   },
+----   teamLabelV: {
+----     color: '#fff',
+-----    fontSize: 14,
+----+    fontSize: 12,
+----     fontWeight: 'bold',
+----+    transform: [{ rotate: '-90deg' }],
+----+    width: CELL_SIZE * 10,
+----+    textAlign: 'center',
+----   },
+----   gridRow: {
+----     flexDirection: 'row',
