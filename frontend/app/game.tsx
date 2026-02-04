@@ -900,6 +900,60 @@ export default function GameScreen() {
               <Text style={styles.modalButtonText}>Manage Player Order</Text>
             </TouchableOpacity>
 
+            {/* New: Undo Last Claim */}
+            <TouchableOpacity
+              style={[styles.modalButton, styles.undoButton, !game.last_claim && styles.disabledButton]}
+              onPress={() => {
+                setShowHostMenu(false);
+                undoLastClaim();
+              }}
+              disabled={!game.last_claim}
+            >
+              <Ionicons name="arrow-undo" size={24} color="#fff" />
+              <Text style={styles.modalButtonText}>
+                {game.last_claim ? `Undo (Square #${game.last_claim.position + 1})` : 'No Claim to Undo'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* New: Add/Remove Players */}
+            <View style={styles.playerManageRow}>
+              <TouchableOpacity
+                style={[styles.halfButton, styles.addPlayerBtn]}
+                onPress={() => {
+                  setShowHostMenu(false);
+                  setShowAddPlayer(true);
+                }}
+              >
+                <Ionicons name="person-add" size={20} color="#fff" />
+                <Text style={styles.halfButtonText}>Add Player</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.halfButton, styles.removePlayerBtn]}
+                onPress={() => {
+                  setShowHostMenu(false);
+                  setShowRemovePlayer(true);
+                }}
+              >
+                <Ionicons name="person-remove" size={20} color="#fff" />
+                <Text style={styles.halfButtonText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* New: Update Score */}
+            <TouchableOpacity
+              style={[styles.modalButton, styles.scoreButton]}
+              onPress={() => {
+                setShowHostMenu(false);
+                setLiveScoreH(String(game.score_horizontal || 0));
+                setLiveScoreV(String(game.score_vertical || 0));
+                setShowScoreModal(true);
+              }}
+            >
+              <Ionicons name="football" size={24} color="#fff" />
+              <Text style={styles.modalButtonText}>Update Live Score</Text>
+            </TouchableOpacity>
+
             <Text style={styles.quarterTitle}>Select Quarter Winners</Text>
             <View style={styles.quarterButtons}>
               {[1, 2, 3, 4].map((q) => (
