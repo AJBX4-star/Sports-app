@@ -135,22 +135,48 @@ export default function GameScreen() {
   };
 
   const connectSocket = () => {
+    console.log('Connecting socket to:', BACKEND_URL);
+    
     const newSocket = io(BACKEND_URL, {
       transports: ['websocket', 'polling'],
+      path: '/socket.io/',
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
 
     newSocket.on('connect', () => {
-      console.log('Socket connected');
+      console.log('Socket connected, joining room:', code);
       newSocket.emit('join_room', { code: code });
     });
 
+    newSocket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+    });
+
+    newSocket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+    });
+
+    newSocket.on('joined_room', (data) => {
+      console.log('Successfully joined room:', data.room);
+    });
+
+    // Full game state update - useful for syncing all clients
+    newSocket.on('game_updated', (data) => {
+      console.log('Received full game update');
+      setGame(data);
+    });
+
     newSocket.on('square_claimed', (data) => {
+      console.log('Square claimed event received');
       setGame(prev => prev ? { 
         ...prev, 
         squares: data.squares, 
         current_turn: data.current_turn ?? prev.current_turn,
         picks_this_turn: data.picks_this_turn ?? prev.picks_this_turn,
-        board_locked: data.board_locked ?? prev.board_locked
+        board_locked: data.board_locked ?? prev.board_locked,
+        last_claim: data.last_claim ?? prev.last_claim
       } : null);
     });
 
