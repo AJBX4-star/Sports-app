@@ -57,9 +57,9 @@ interface GameInfo {
   hostId: string | null;
 }
 
-// Cell size calculation - fit 10 cells plus labels
-const CELL_SIZE = Math.floor((SCREEN_WIDTH - 60) / 11);
-const LABEL_SIZE = CELL_SIZE;
+// Cell size calculation - fit 10 cells plus labels in screen width
+const CELL_SIZE = Math.floor((SCREEN_WIDTH - 50) / 11);
+const LABEL_SIZE = 20;
 
 export default function GameScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
