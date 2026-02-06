@@ -953,6 +953,7 @@ export default function GameScreen() {
             </View>
           </View>
         </ScrollView>
+        </ScrollView>
 
         {/* Draft Info */}
         <View style={styles.draftInfo}>
