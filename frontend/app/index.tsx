@@ -52,8 +52,10 @@ export default function HomeScreen() {
   };
 
   const deleteGame = async (gameCode: string) => {
-    // Direct delete without confirmation for now - simpler and more reliable
+    console.log('deleteGame called for:', gameCode);
+    // Direct delete without confirmation
     const updatedGames = savedGames.filter(g => g.code !== gameCode);
+    console.log('Updated games:', updatedGames.length);
     setSavedGames(updatedGames);
     await AsyncStorage.setItem('savedGames', JSON.stringify(updatedGames));
     
@@ -64,6 +66,7 @@ export default function HomeScreen() {
   };
 
   const clearAllGames = async () => {
+    console.log('clearAllGames called');
     setSavedGames([]);
     await AsyncStorage.setItem('savedGames', JSON.stringify([]));
     setShowMyGames(false);
