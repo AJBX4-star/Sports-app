@@ -823,9 +823,30 @@ export default function GameScreen() {
           </View>
         )}
 
+        {/* Zoom Controls */}
+        <View style={styles.zoomControls}>
+          <TouchableOpacity style={styles.zoomButton} onPress={zoomOut}>
+            <Ionicons name="remove" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.zoomButton} onPress={resetZoom}>
+            <Text style={styles.zoomText}>{Math.round(zoomLevel * 100)}%</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.zoomButton} onPress={zoomIn}>
+            <Ionicons name="add" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
         {/* Grid */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.gridScrollH}>
-          <View style={styles.gridWrapper}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          style={styles.gridScrollH}
+          maximumZoomScale={MAX_ZOOM}
+          minimumZoomScale={MIN_ZOOM}
+          pinchGestureEnabled={true}
+          bouncesZoom={true}
+        >
+          <View style={[styles.gridWrapper, { transform: [{ scale: zoomLevel }] }]}>
             {/* Top Row with Corner and Team A label */}
             <View style={styles.topLabelRow}>
               <View style={{ width: LABEL_SIZE + 20 }} />
