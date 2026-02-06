@@ -476,9 +476,12 @@ const styles = StyleSheet.create({
   },
   deleteGameButton: {
     padding: 16,
-    backgroundColor: 'rgba(255,68,68,0.1)',
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,68,68,0.15)',
     alignSelf: 'stretch',
     justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 56,
   },
   clearAllButton: {
     flexDirection: 'row',
