@@ -46,7 +46,7 @@ export default function HomeScreen() {
       code: game.code,
       playerName: game.playerName,
       isHost: game.isHost,
-      hostId: game.isHost ? 'stored' : null,
+      hostId: game.hostId || null,
     }));
     router.push(`/game?code=${game.code}`);
   };
