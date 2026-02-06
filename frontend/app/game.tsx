@@ -840,17 +840,19 @@ export default function GameScreen() {
         <ScrollView 
           style={styles.gridScrollV}
           showsVerticalScrollIndicator={zoomLevel > 1}
-          contentContainerStyle={{ flexGrow: 1 }}
+          nestedScrollEnabled={true}
         >
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={zoomLevel > 1}
             style={styles.gridScrollH}
-            contentContainerStyle={{ flexGrow: 1 }}
+            nestedScrollEnabled={true}
           >
             <View style={[styles.gridWrapper, { 
               transform: [{ scale: zoomLevel }],
               transformOrigin: 'top left',
+              width: (CELL_SIZE * 10 + LABEL_SIZE + 30) * zoomLevel,
+              height: (CELL_SIZE * 10 + LABEL_SIZE + 60) * zoomLevel,
             }]}>
             {/* Top Row with Corner and Team A label */}
             <View style={styles.topLabelRow}>
