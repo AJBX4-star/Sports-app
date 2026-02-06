@@ -13,6 +13,7 @@ interface SavedGame {
   code: string;
   playerName: string;
   isHost: boolean;
+  hostId?: string;
   teamH: string;
   teamV: string;
   joinedAt: string;
