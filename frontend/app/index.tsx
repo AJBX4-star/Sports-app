@@ -185,6 +185,65 @@ export default function HomeScreen() {
           </SafeAreaView>
         </View>
       </ImageBackground>
+
+      {/* My Games Modal */}
+      {showMyGames && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>My Games</Text>
+              <TouchableOpacity onPress={() => setShowMyGames(false)}>
+                <Ionicons name="close" size={28} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.gamesList}>
+              {savedGames.map((game) => (
+                <View key={game.code} style={styles.savedGameCard}>
+                  <TouchableOpacity 
+                    style={styles.savedGameInfo}
+                    onPress={() => {
+                      setShowMyGames(false);
+                      rejoinGame(game);
+                    }}
+                  >
+                    <View style={styles.savedGameHeader}>
+                      <Text style={styles.savedGameCode}>{game.code}</Text>
+                      {game.isHost && (
+                        <View style={styles.hostBadge}>
+                          <Text style={styles.hostBadgeText}>HOST</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.savedGameTeams}>
+                      {game.teamH} vs {game.teamV}
+                    </Text>
+                    <Text style={styles.savedGamePlayer}>
+                      Playing as: {game.playerName}
+                    </Text>
+                    <Text style={styles.savedGameDate}>
+                      Joined: {new Date(game.joinedAt).toLocaleDateString()}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteGameButton}
+                    onPress={() => deleteGame(game.code)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#ff4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+
+            {savedGames.length > 1 && (
+              <TouchableOpacity style={styles.clearAllButton} onPress={clearAllGames}>
+                <Ionicons name="trash" size={18} color="#ff4444" />
+                <Text style={styles.clearAllText}>Clear All Games</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
