@@ -1,15 +1,91 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ImageBackground, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ImageBackground, Dimensions, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Sports themed background image - from environment or fallback
 const HERO_IMAGE = process.env.EXPO_PUBLIC_HERO_IMAGE || 'https://customer-assets.emergentagent.com/job_6e1df73e-25d2-4f8e-bae0-a8029b2b9c4b/artifacts/6l9s6wqc_file_00000000fec8722f8b0dccf0e21824a4.png';
 
+interface SavedGame {
+  code: string;
+  playerName: string;
+  isHost: boolean;
+  teamH: string;
+  teamV: string;
+  joinedAt: string;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
+  const [savedGames, setSavedGames] = useState<SavedGame[]>([]);
+  const [showMyGames, setShowMyGames] = useState(false);
+
+  useEffect(() => {
+    loadSavedGames();
+  }, []);
+
+  const loadSavedGames = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('savedGames');
+      if (stored) {
+        const games = JSON.parse(stored);
+        setSavedGames(games);
+      }
+    } catch (error) {
+      console.error('Error loading saved games:', error);
+    }
+  };
+
+  const rejoinGame = (game: SavedGame) => {
+    // Store current game info before navigating
+    AsyncStorage.setItem('currentGame', JSON.stringify({
+      code: game.code,
+      playerName: game.playerName,
+      isHost: game.isHost,
+      hostId: game.isHost ? 'stored' : null,
+    }));
+    router.push(`/game?code=${game.code}`);
+  };
+
+  const deleteGame = async (gameCode: string) => {
+    Alert.alert(
+      'Remove Game',
+      'Are you sure you want to remove this game from your list?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const updatedGames = savedGames.filter(g => g.code !== gameCode);
+            setSavedGames(updatedGames);
+            await AsyncStorage.setItem('savedGames', JSON.stringify(updatedGames));
+          },
+        },
+      ]
+    );
+  };
+
+  const clearAllGames = async () => {
+    Alert.alert(
+      'Clear All Games',
+      'Are you sure you want to remove all saved games?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            setSavedGames([]);
+            await AsyncStorage.setItem('savedGames', JSON.stringify([]));
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
