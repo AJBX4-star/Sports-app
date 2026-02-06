@@ -52,40 +52,48 @@ export default function HomeScreen() {
   };
 
   const deleteGame = async (gameCode: string) => {
-    Alert.alert(
-      'Remove Game',
-      'Are you sure you want to remove this game from your list?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            const updatedGames = savedGames.filter(g => g.code !== gameCode);
-            setSavedGames(updatedGames);
-            await AsyncStorage.setItem('savedGames', JSON.stringify(updatedGames));
-          },
-        },
-      ]
-    );
+    const confirmDelete = async () => {
+      const updatedGames = savedGames.filter(g => g.code !== gameCode);
+      setSavedGames(updatedGames);
+      await AsyncStorage.setItem('savedGames', JSON.stringify(updatedGames));
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to remove this game from your list?')) {
+        await confirmDelete();
+      }
+    } else {
+      Alert.alert(
+        'Remove Game',
+        'Are you sure you want to remove this game from your list?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Remove', style: 'destructive', onPress: confirmDelete },
+        ]
+      );
+    }
   };
 
   const clearAllGames = async () => {
-    Alert.alert(
-      'Clear All Games',
-      'Are you sure you want to remove all saved games?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            setSavedGames([]);
-            await AsyncStorage.setItem('savedGames', JSON.stringify([]));
-          },
-        },
-      ]
-    );
+    const confirmClear = async () => {
+      setSavedGames([]);
+      await AsyncStorage.setItem('savedGames', JSON.stringify([]));
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to remove all saved games?')) {
+        await confirmClear();
+      }
+    } else {
+      Alert.alert(
+        'Clear All Games',
+        'Are you sure you want to remove all saved games?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Clear All', style: 'destructive', onPress: confirmClear },
+        ]
+      );
+    }
   };
 
   return (
