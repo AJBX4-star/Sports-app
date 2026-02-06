@@ -61,6 +61,21 @@ export default function JoinGameScreen() {
         hostId: null,
       }));
 
+      // Save to savedGames list
+      const savedGamesStr = await AsyncStorage.getItem('savedGames');
+      const savedGames = savedGamesStr ? JSON.parse(savedGamesStr) : [];
+      const newSavedGame = {
+        code: game.code,
+        playerName: playerName.trim(),
+        isHost: false,
+        teamH: game.team_horizontal || 'Team A',
+        teamV: game.team_vertical || 'Team B',
+        joinedAt: new Date().toISOString(),
+      };
+      // Add to beginning of list, avoid duplicates
+      const filteredGames = savedGames.filter((g: any) => g.code !== game.code);
+      await AsyncStorage.setItem('savedGames', JSON.stringify([newSavedGame, ...filteredGames]));
+
       router.replace({ pathname: '/game', params: { code: game.code } });
     } catch (error: any) {
       console.error('Error joining game:', error);
