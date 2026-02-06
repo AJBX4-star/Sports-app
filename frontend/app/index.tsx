@@ -142,6 +142,18 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* My Games Button */}
+              {savedGames.length > 0 && (
+                <TouchableOpacity
+                  style={styles.myGamesButton}
+                  onPress={() => setShowMyGames(true)}
+                >
+                  <Ionicons name="bookmark" size={20} color="#4CAF50" />
+                  <Text style={styles.myGamesButtonText}>My Games ({savedGames.length})</Text>
+                  <Ionicons name="chevron-forward" size={20} color="#888" />
+                </TouchableOpacity>
+              )}
+
               {/* Instructions */}
               <View style={styles.instructions}>
                 <Text style={styles.instructionTitle}>How to Play</Text>
