@@ -66,6 +66,21 @@ export default function CreateGameScreen() {
         hostId: hostId,
       }));
 
+      // Save to savedGames list
+      const savedGamesStr = await AsyncStorage.getItem('savedGames');
+      const savedGames = savedGamesStr ? JSON.parse(savedGamesStr) : [];
+      const newSavedGame = {
+        code: game.code,
+        playerName: hostName.trim(),
+        isHost: true,
+        teamH: teamHorizontal.trim() || 'Team A',
+        teamV: teamVertical.trim() || 'Team B',
+        joinedAt: new Date().toISOString(),
+      };
+      // Add to beginning of list, avoid duplicates
+      const filteredGames = savedGames.filter((g: any) => g.code !== game.code);
+      await AsyncStorage.setItem('savedGames', JSON.stringify([newSavedGame, ...filteredGames]));
+
       router.replace({ pathname: '/game', params: { code: game.code } });
     } catch (error) {
       console.error('Error creating game:', error);
