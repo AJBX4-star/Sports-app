@@ -102,6 +102,23 @@ export default function GameScreen() {
   const [showRemovePlayer, setShowRemovePlayer] = useState(false);
   const [playerToRemove, setPlayerToRemove] = useState('');
   const [releaseSquares, setReleaseSquares] = useState(false);
+  // Zoom state
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const MIN_ZOOM = 0.6;
+  const MAX_ZOOM = 2.0;
+
+  // Zoom controls
+  const zoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.2, MAX_ZOOM));
+  };
+
+  const zoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.2, MIN_ZOOM));
+  };
+
+  const resetZoom = () => {
+    setZoomLevel(1);
+  };
 
   // Load game info and connect to socket
   useEffect(() => {
