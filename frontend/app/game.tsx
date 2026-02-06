@@ -1713,8 +1713,12 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
   },
-  gridScrollH: {
+  gridScrollV: {
+    flex: 1,
     marginBottom: 12,
+  },
+  gridScrollH: {
+    flexGrow: 0,
   },
   gridWrapper: {
     alignItems: 'flex-start',
