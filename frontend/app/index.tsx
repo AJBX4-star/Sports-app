@@ -209,7 +209,11 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteGameButton}
-                    onPress={() => deleteGame(game.code)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      deleteGame(game.code);
+                    }}
+                    activeOpacity={0.6}
                   >
                     <Ionicons name="trash-outline" size={20} color="#ff4444" />
                   </TouchableOpacity>
