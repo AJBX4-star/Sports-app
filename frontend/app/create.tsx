@@ -73,6 +73,7 @@ export default function CreateGameScreen() {
         code: game.code,
         playerName: hostName.trim(),
         isHost: true,
+        hostId: hostId,  // Store the hostId for rejoin
         teamH: teamHorizontal.trim() || 'Team A',
         teamV: teamVertical.trim() || 'Team B',
         joinedAt: new Date().toISOString(),
