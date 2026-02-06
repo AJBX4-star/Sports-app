@@ -207,16 +207,12 @@ export default function HomeScreen() {
                       Joined: {new Date(game.joinedAt).toLocaleDateString()}
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
+                  <Pressable
                     style={styles.deleteGameButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      deleteGame(game.code);
-                    }}
-                    activeOpacity={0.6}
+                    onPress={() => deleteGame(game.code)}
                   >
-                    <Ionicons name="trash-outline" size={20} color="#ff4444" />
-                  </TouchableOpacity>
+                    <Ionicons name="trash-outline" size={24} color="#ff4444" />
+                  </Pressable>
                 </View>
               ))}
             </ScrollView>
