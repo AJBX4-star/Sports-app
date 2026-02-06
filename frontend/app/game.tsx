@@ -836,17 +836,22 @@ export default function GameScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Grid */}
+        {/* Grid - Scrollable in both directions when zoomed */}
         <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          style={styles.gridScrollH}
-          maximumZoomScale={MAX_ZOOM}
-          minimumZoomScale={MIN_ZOOM}
-          pinchGestureEnabled={true}
-          bouncesZoom={true}
+          style={styles.gridScrollV}
+          showsVerticalScrollIndicator={zoomLevel > 1}
+          contentContainerStyle={{ flexGrow: 1 }}
         >
-          <View style={[styles.gridWrapper, { transform: [{ scale: zoomLevel }] }]}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={zoomLevel > 1}
+            style={styles.gridScrollH}
+            contentContainerStyle={{ flexGrow: 1 }}
+          >
+            <View style={[styles.gridWrapper, { 
+              transform: [{ scale: zoomLevel }],
+              transformOrigin: 'top left',
+            }]}>
             {/* Top Row with Corner and Team A label */}
             <View style={styles.topLabelRow}>
               <View style={{ width: LABEL_SIZE + 20 }} />
