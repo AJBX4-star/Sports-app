@@ -39,9 +39,9 @@ export default function HomeScreen() {
     }
   };
 
-  const rejoinGame = (game: SavedGame) => {
+  const rejoinGame = async (game: SavedGame) => {
     // Store current game info before navigating
-    AsyncStorage.setItem('currentGame', JSON.stringify({
+    await AsyncStorage.setItem('currentGame', JSON.stringify({
       code: game.code,
       playerName: game.playerName,
       isHost: game.isHost,
