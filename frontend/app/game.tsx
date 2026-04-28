@@ -414,7 +414,11 @@ export default function GameScreen() {
       setGame({...data});
 
       // Auto-open customize modal so player can pick color/pattern right after claiming
-      setTimeout(() => openCustomizeModal(position), 200);
+      // Set state directly instead of using openCustomizeModal to avoid stale closure
+      setCustomizePosition(position);
+      setSelectedColor(null);
+      setSelectedPattern(null);
+      setTimeout(() => setShowCustomize(true), 250);
     } catch (error: any) {
       if (error.message !== 'Square already claimed') {
         Alert.alert('Error', error.message || 'Failed to claim square');
