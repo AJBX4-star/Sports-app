@@ -126,6 +126,11 @@ export default function GameScreen() {
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [editTeamH, setEditTeamH] = useState('');
   const [editTeamV, setEditTeamV] = useState('');
+  // Game Setup modal (host-only) - lets host edit teams + picks/turn + draft style after game creation
+  const [showGameSetup, setShowGameSetup] = useState(false);
+  const [editPicksPerTurn, setEditPicksPerTurn] = useState(1);
+  const [editDraftStyle, setEditDraftStyle] = useState<'snake' | 'standard'>('snake');
+  const [savingSetup, setSavingSetup] = useState(false);
   const [showWinnerInput, setShowWinnerInput] = useState(false);
   const [selectedQuarter, setSelectedQuarter] = useState(1);
   const [scoreH, setScoreH] = useState('');
@@ -317,6 +322,15 @@ export default function GameScreen() {
         ...prev, 
         team_horizontal: data.team_horizontal, 
         team_vertical: data.team_vertical 
+      } : null);
+    });
+
+    newSocket.on('settings_updated', (data) => {
+      console.log('Settings updated:', data);
+      setGame(prev => prev ? {
+        ...prev,
+        ...(data.picks_per_turn !== undefined ? { picks_per_turn: data.picks_per_turn } : {}),
+        ...(data.draft_style !== undefined ? { draft_style: data.draft_style } : {}),
       } : null);
     });
 
@@ -673,6 +687,56 @@ export default function GameScreen() {
       setShowTeamModal(false);
     } catch (error) {
       Alert.alert('Error', 'Failed to update team names');
+    }
+  };
+
+  // Host-only: update full game setup (teams + picks/turn + draft style) after creation
+  const updateGameSetup = async () => {
+    if (!game || !gameInfo?.isHost) return;
+    setSavingSetup(true);
+    try {
+      // 1) Update teams if changed
+      const teamHChanged = editTeamH && editTeamH !== game.team_horizontal;
+      const teamVChanged = editTeamV && editTeamV !== game.team_vertical;
+      if (teamHChanged || teamVChanged) {
+        const teamRes = await fetch(`${BACKEND_URL}/api/games/${code}/teams`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            team_horizontal: editTeamH || game.team_horizontal,
+            team_vertical: editTeamV || game.team_vertical,
+          }),
+        });
+        if (!teamRes.ok) throw new Error('Failed to update teams');
+      }
+
+      // 2) Update settings (picks_per_turn, draft_style)
+      const settingsChanged =
+        editPicksPerTurn !== game.picks_per_turn ||
+        editDraftStyle !== game.draft_style;
+      if (settingsChanged) {
+        const settingsRes = await fetch(`${BACKEND_URL}/api/games/${code}/settings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            picks_per_turn: editPicksPerTurn,
+            draft_style: editDraftStyle,
+          }),
+        });
+        if (!settingsRes.ok) throw new Error('Failed to update settings');
+      }
+
+      // 3) Re-fetch the game (settings endpoint already returns it; just call fetch for fresh state)
+      const fresh = await fetch(`${BACKEND_URL}/api/games/${code}`);
+      if (fresh.ok) {
+        const data = await fresh.json();
+        setGame({ ...data });
+      }
+      setShowGameSetup(false);
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to update game setup');
+    } finally {
+      setSavingSetup(false);
     }
   };
 
@@ -1294,16 +1358,18 @@ export default function GameScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.modalButton}
+              style={[styles.modalButton, styles.gameSetupButton]}
               onPress={() => {
                 setShowHostMenu(false);
                 setEditTeamH(game.team_horizontal);
                 setEditTeamV(game.team_vertical);
-                setShowTeamModal(true);
+                setEditPicksPerTurn(game.picks_per_turn || 1);
+                setEditDraftStyle((game.draft_style as 'snake' | 'standard') || 'snake');
+                setShowGameSetup(true);
               }}
             >
-              <Ionicons name="create-outline" size={24} color="#fff" />
-              <Text style={styles.modalButtonText}>Edit Team Names</Text>
+              <Ionicons name="settings" size={24} color="#fff" />
+              <Text style={styles.modalButtonText}>Game Setup</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1998,6 +2064,157 @@ export default function GameScreen() {
             <TouchableOpacity
               style={styles.closeButton}
               onPress={() => setShowCustomize(false)}
+            >
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Game Setup Modal (Host only) — edit teams, picks/turn, draft style */}
+      <Modal
+        visible={showGameSetup}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowGameSetup(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Game Setup</Text>
+            <Text style={styles.modalSubtitle}>
+              Update your game settings — changes broadcast to all players in real time
+            </Text>
+
+            <ScrollView style={{ maxHeight: 460 }}>
+              {/* Team Names */}
+              <Text style={styles.sectionLabel}>Team Names</Text>
+              <Text style={styles.inputHint}>Top of grid (Team A)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editTeamH}
+                onChangeText={setEditTeamH}
+                placeholder="Team A"
+                placeholderTextColor="#666"
+                maxLength={30}
+              />
+              <Text style={styles.inputHint}>Left of grid (Team B)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editTeamV}
+                onChangeText={setEditTeamV}
+                placeholder="Team B"
+                placeholderTextColor="#666"
+                maxLength={30}
+              />
+
+              {/* Picks Per Turn */}
+              <Text style={styles.sectionLabel}>Picks Per Turn</Text>
+              <Text style={styles.sectionHelp}>
+                How many squares each player picks before passing the turn
+              </Text>
+              <View style={styles.picksRow}>
+                {[1, 2, 3, 4, 5, 10].map((n) => (
+                  <TouchableOpacity
+                    key={n}
+                    style={[
+                      styles.picksOption,
+                      editPicksPerTurn === n && styles.picksOptionSelected,
+                    ]}
+                    onPress={() => setEditPicksPerTurn(n)}
+                  >
+                    <Text
+                      style={[
+                        styles.picksOptionText,
+                        editPicksPerTurn === n && styles.picksOptionTextSelected,
+                      ]}
+                    >
+                      {n}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Draft Style */}
+              <Text style={styles.sectionLabel}>Draft Style</Text>
+              <View style={styles.draftStyleRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.draftStyleOption,
+                    editDraftStyle === 'snake' && styles.draftStyleOptionSelected,
+                  ]}
+                  onPress={() => setEditDraftStyle('snake')}
+                >
+                  <Ionicons
+                    name="git-branch"
+                    size={22}
+                    color={editDraftStyle === 'snake' ? '#4CAF50' : '#888'}
+                  />
+                  <Text
+                    style={[
+                      styles.draftStyleTitle,
+                      editDraftStyle === 'snake' && styles.draftStyleTitleSelected,
+                    ]}
+                  >
+                    Snake
+                  </Text>
+                  <Text style={styles.draftStyleDesc}>
+                    Order reverses each round
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.draftStyleOption,
+                    editDraftStyle === 'standard' && styles.draftStyleOptionSelected,
+                  ]}
+                  onPress={() => setEditDraftStyle('standard')}
+                >
+                  <Ionicons
+                    name="repeat"
+                    size={22}
+                    color={editDraftStyle === 'standard' ? '#4CAF50' : '#888'}
+                  />
+                  <Text
+                    style={[
+                      styles.draftStyleTitle,
+                      editDraftStyle === 'standard' && styles.draftStyleTitleSelected,
+                    ]}
+                  >
+                    Standard
+                  </Text>
+                  <Text style={styles.draftStyleDesc}>
+                    Same order every round
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {game.draft_started && (
+                <View style={styles.warningBox}>
+                  <Ionicons name="warning" size={16} color="#FFA726" />
+                  <Text style={styles.warningText}>
+                    The draft has already started. Changing settings will affect remaining picks.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.saveButton, savingSetup && styles.disabledButton]}
+              onPress={updateGameSetup}
+              disabled={savingSetup}
+            >
+              {savingSetup ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                  <Text style={styles.saveButtonText}>Save Changes</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowGameSetup(false)}
             >
               <Text style={styles.closeButtonText}>Cancel</Text>
             </TouchableOpacity>
@@ -2860,5 +3077,92 @@ const styles = StyleSheet.create({
   patternLabelSelected: {
     color: '#4CAF50',
     fontWeight: '600',
+  },
+  // Game Setup modal styles
+  gameSetupButton: {
+    backgroundColor: '#1976D2',
+  },
+  inputHint: {
+    color: '#888',
+    fontSize: 11,
+    marginBottom: 4,
+    marginTop: 2,
+  },
+  picksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  picksOption: {
+    flex: 1,
+    minWidth: 50,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  picksOptionSelected: {
+    backgroundColor: 'rgba(76,175,80,0.2)',
+    borderColor: '#4CAF50',
+  },
+  picksOptionText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  picksOptionTextSelected: {
+    color: '#4CAF50',
+  },
+  draftStyleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  draftStyleOption: {
+    flex: 1,
+    padding: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    gap: 6,
+  },
+  draftStyleOptionSelected: {
+    backgroundColor: 'rgba(76,175,80,0.18)',
+    borderColor: '#4CAF50',
+  },
+  draftStyleTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  draftStyleTitleSelected: {
+    color: '#4CAF50',
+  },
+  draftStyleDesc: {
+    color: '#888',
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: 'rgba(255,167,38,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,167,38,0.4)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  warningText: {
+    color: '#FFA726',
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
   },
 });
