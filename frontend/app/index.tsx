@@ -1,13 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ImageBackground, Dimensions, ScrollView, Alert, Platform, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  ImageBackground,
+  Dimensions,
+  ScrollView,
+  Modal,
+} from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Sports themed background image - from environment or fallback
-const HERO_IMAGE = process.env.EXPO_PUBLIC_HERO_IMAGE || 'https://customer-assets.emergentagent.com/job_6e1df73e-25d2-4f8e-bae0-a8029b2b9c4b/artifacts/6l9s6wqc_file_00000000fec8722f8b0dccf0e21824a4.png';
+const HERO_IMAGE =
+  process.env.EXPO_PUBLIC_HERO_IMAGE ||
+  'https://customer-assets.emergentagent.com/job_6e1df73e-25d2-4f8e-bae0-a8029b2b9c4b/artifacts/6l9s6wqc_file_00000000fec8722f8b0dccf0e21824a4.png';
 
 interface SavedGame {
   code: string;
@@ -24,49 +36,57 @@ export default function HomeScreen() {
   const [savedGames, setSavedGames] = useState<SavedGame[]>([]);
   const [showMyGames, setShowMyGames] = useState(false);
 
-  useEffect(() => {
-    loadSavedGames();
-  }, []);
-
-  const loadSavedGames = async () => {
+  const loadSavedGames = useCallback(async () => {
     try {
       const stored = await AsyncStorage.getItem('savedGames');
       if (stored) {
         const games = JSON.parse(stored);
-        setSavedGames(games);
+        setSavedGames(Array.isArray(games) ? games : []);
+      } else {
+        setSavedGames([]);
       }
     } catch (error) {
       console.error('Error loading saved games:', error);
     }
-  };
+  }, []);
+
+  // Reload saved games every time home screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadSavedGames();
+    }, [loadSavedGames])
+  );
 
   const rejoinGame = async (game: SavedGame) => {
-    // Store current game info before navigating
-    await AsyncStorage.setItem('currentGame', JSON.stringify({
-      code: game.code,
-      playerName: game.playerName,
-      isHost: game.isHost,
-      hostId: game.hostId || null,
-    }));
+    await AsyncStorage.setItem(
+      'currentGame',
+      JSON.stringify({
+        code: game.code,
+        playerName: game.playerName,
+        isHost: game.isHost,
+        hostId: game.hostId || null,
+      })
+    );
+    setShowMyGames(false);
     router.push(`/game?code=${game.code}`);
   };
 
   const deleteGame = async (gameCode: string) => {
-    console.log('deleteGame called for:', gameCode);
-    // Direct delete without confirmation
-    const updatedGames = savedGames.filter(g => g.code !== gameCode);
-    console.log('Updated games:', updatedGames.length);
-    setSavedGames(updatedGames);
-    await AsyncStorage.setItem('savedGames', JSON.stringify(updatedGames));
-    
-    // Close modal if no games left
-    if (updatedGames.length === 0) {
-      setShowMyGames(false);
-    }
+    console.log('[deleteGame] Triggered for code:', gameCode);
+    // Use functional setState to guarantee fresh state
+    setSavedGames((prev) => {
+      const updated = prev.filter((g) => g.code !== gameCode);
+      console.log('[deleteGame] Before:', prev.length, 'After:', updated.length);
+      // Persist asynchronously
+      AsyncStorage.setItem('savedGames', JSON.stringify(updated)).catch((err) =>
+        console.error('Failed to persist after delete:', err)
+      );
+      return updated;
+    });
   };
 
   const clearAllGames = async () => {
-    console.log('clearAllGames called');
+    console.log('[clearAllGames] Triggered');
     setSavedGames([]);
     await AsyncStorage.setItem('savedGames', JSON.stringify([]));
     setShowMyGames(false);
@@ -74,14 +94,10 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <ImageBackground
-        source={{ uri: HERO_IMAGE }}
-        style={styles.heroImage}
-        resizeMode="cover"
-      >
+      <ImageBackground source={{ uri: HERO_IMAGE }} style={styles.heroImage} resizeMode="cover">
         <View style={styles.overlay}>
           <SafeAreaView style={styles.safeArea}>
-            <View style={styles.content}>
+            <ScrollView contentContainerStyle={styles.content}>
               {/* Logo Section */}
               <View style={styles.header}>
                 <View style={styles.logoContainer}>
@@ -143,19 +159,27 @@ export default function HomeScreen() {
               <View style={styles.instructions}>
                 <Text style={styles.instructionTitle}>How to Play</Text>
                 <View style={styles.instructionItem}>
-                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>1</Text></View>
+                  <View style={styles.stepNumber}>
+                    <Text style={styles.stepNumberText}>1</Text>
+                  </View>
                   <Text style={styles.instructionText}>Host creates game with team names</Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>2</Text></View>
+                  <View style={styles.stepNumber}>
+                    <Text style={styles.stepNumberText}>2</Text>
+                  </View>
                   <Text style={styles.instructionText}>Players join and claim squares in turn</Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>3</Text></View>
+                  <View style={styles.stepNumber}>
+                    <Text style={styles.stepNumberText}>3</Text>
+                  </View>
                   <Text style={styles.instructionText}>Numbers randomize when board is full</Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>4</Text></View>
+                  <View style={styles.stepNumber}>
+                    <Text style={styles.stepNumberText}>4</Text>
+                  </View>
                   <Text style={styles.instructionText}>Winners selected each quarter</Text>
                 </View>
               </View>
@@ -166,59 +190,80 @@ export default function HomeScreen() {
                 <Text style={styles.footerText}>Perfect for Game Day!</Text>
                 <Ionicons name="football" size={20} color="#4CAF50" />
               </View>
-            </View>
+            </ScrollView>
           </SafeAreaView>
         </View>
       </ImageBackground>
 
-      {/* My Games Modal */}
-      {showMyGames && (
+      {/* My Games Modal - using proper Modal component for reliable touch handling */}
+      <Modal
+        visible={showMyGames}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMyGames(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>My Games</Text>
-              <TouchableOpacity onPress={() => setShowMyGames(false)}>
+              <TouchableOpacity
+                onPress={() => setShowMyGames(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <Ionicons name="close" size={28} color="#fff" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.gamesList}>
-              {savedGames.map((game) => (
-                <View key={game.code} style={styles.savedGameCard}>
-                  <TouchableOpacity 
-                    style={styles.savedGameInfo}
-                    onPress={() => {
-                      setShowMyGames(false);
-                      rejoinGame(game);
-                    }}
-                  >
-                    <View style={styles.savedGameHeader}>
-                      <Text style={styles.savedGameCode}>{game.code}</Text>
-                      {game.isHost && (
-                        <View style={styles.hostBadge}>
-                          <Text style={styles.hostBadgeText}>HOST</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.savedGameTeams}>
-                      {game.teamH} vs {game.teamV}
-                    </Text>
-                    <Text style={styles.savedGamePlayer}>
-                      Playing as: {game.playerName}
-                    </Text>
-                    <Text style={styles.savedGameDate}>
-                      Joined: {new Date(game.joinedAt).toLocaleDateString()}
-                    </Text>
-                  </TouchableOpacity>
-                  <Pressable
-                    style={styles.deleteGameButton}
-                    onPress={() => deleteGame(game.code)}
-                  >
-                    <Ionicons name="trash-outline" size={24} color="#ff4444" />
-                  </Pressable>
-                </View>
-              ))}
-            </ScrollView>
+            {savedGames.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="bookmark-outline" size={48} color="#444" />
+                <Text style={styles.emptyText}>No saved games yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Host or join a game and it will appear here
+                </Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.gamesList}>
+                {savedGames.map((game) => (
+                  <View key={game.code} style={styles.savedGameCard}>
+                    {/* Info section - rejoin */}
+                    <TouchableOpacity
+                      style={styles.savedGameInfo}
+                      activeOpacity={0.7}
+                      onPress={() => rejoinGame(game)}
+                    >
+                      <View style={styles.savedGameHeader}>
+                        <Text style={styles.savedGameCode}>{game.code}</Text>
+                        {game.isHost && (
+                          <View style={styles.hostBadge}>
+                            <Text style={styles.hostBadgeText}>HOST</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.savedGameTeams}>
+                        {game.teamH} vs {game.teamV}
+                      </Text>
+                      <Text style={styles.savedGamePlayer}>Playing as: {game.playerName}</Text>
+                      <Text style={styles.savedGameDate}>
+                        Joined: {new Date(game.joinedAt).toLocaleDateString()}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Delete button - separated by margin to ensure it has its own touchable area */}
+                    <TouchableOpacity
+                      style={styles.deleteGameButton}
+                      activeOpacity={0.6}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      onPress={() => deleteGame(game.code)}
+                      testID={`delete-${game.code}`}
+                    >
+                      <Ionicons name="trash-outline" size={22} color="#ff4444" />
+                      <Text style={styles.deleteLabel}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
 
             {savedGames.length > 1 && (
               <TouchableOpacity style={styles.clearAllButton} onPress={clearAllGames}>
@@ -228,7 +273,7 @@ export default function HomeScreen() {
             )}
           </View>
         </View>
-      )}
+      </Modal>
     </View>
   );
 }
@@ -250,7 +295,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     padding: 24,
     justifyContent: 'center',
   },
@@ -393,11 +438,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -407,6 +448,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a2e',
     borderRadius: 16,
     width: '100%',
+    maxWidth: 500,
     maxHeight: '80%',
     padding: 20,
     borderWidth: 1,
@@ -426,12 +468,27 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
+  emptyState: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 12,
+  },
+  emptySubtext: {
+    color: '#888',
+    fontSize: 13,
+    marginTop: 6,
+    textAlign: 'center',
+  },
   gamesList: {
     maxHeight: 400,
   },
   savedGameCard: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 12,
     marginBottom: 12,
@@ -478,13 +535,19 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   deleteGameButton: {
-    padding: 16,
-    paddingHorizontal: 20,
-    backgroundColor: 'rgba(255,68,68,0.15)',
-    alignSelf: 'stretch',
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255,68,68,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 56,
+    minWidth: 70,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255,68,68,0.3)',
+  },
+  deleteLabel: {
+    color: '#ff4444',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
   },
   clearAllButton: {
     flexDirection: 'row',

@@ -177,6 +177,21 @@ backend:
         agent: "main"
         comment: "Socket.IO emits events for claims, randomization, winners"
 
+  - task: "Customize Square API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint: POST /api/games/{code}/customize-square allows the player who claimed a square (or host) to set color and/or pattern. Validates ownership: returns 403 if non-owner non-host, 400 if square not claimed, 404 if game not found. Persists color/pattern to MongoDB, emits 'square_customized' socket event."
+      - working: true
+        agent: "testing"
+        comment: "✅ All Customize Square API tests passed: Happy path (player customizes own square), permission checks (403 for non-owners), host privileges (can customize any square), validation (400 for unclaimed squares, invalid positions), game not found (404), and null value clearing. Fixed critical bug in claim endpoints that weren't preserving color/pattern fields. All regression tests passed - existing APIs work correctly with new Square model fields."
+
 frontend:
   - task: "Home Screen"
     implemented: true
@@ -281,8 +296,7 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "All core features implemented and working"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -292,3 +306,7 @@ agent_communication:
     message: "Sports Squares MVP complete. All features working: 10x10 grid, team names, square claiming, number randomization, winner selection with green highlighting"
   - agent: "main"
     message: "Completed UI refactor: Team B name now displays on left side of grid with rotated vertical text. Implemented polling-based real-time updates (every 3 seconds) as fallback since WebSocket through tunnel has connection issues. Added live winner highlighting styles (gold border for current winning square based on score)."
+  - agent: "main"
+    message: "Added new Customize Square API. Please test POST /api/games/{code}/customize-square: 1) Create game, claim a square, then customize with color and pattern - should return updated game with color/pattern set on the square. 2) Verify a different player CANNOT customize someone else's square (expect 403). 3) Verify host CAN customize any claimed square. 4) Verify cannot customize unclaimed square (expect 400). 5) Verify customization with null color/pattern clears them. Existing endpoints should still work — please regression-test create, join, claim, randomize, winner endpoints since the Square model gained two new optional fields (color, pattern)."
+  - agent: "testing"
+    message: "✅ Customize Square API testing complete - all 8 test scenarios passed including happy path, permission checks, host privileges, validation, and null value clearing. Fixed critical bug where claim/host-claim/undo/remove-player endpoints weren't preserving color/pattern fields. All 5 regression tests passed - existing APIs work correctly with new Square model. Backend is fully functional."

@@ -48,6 +48,8 @@ class Square(BaseModel):
     player_name: Optional[str] = None
     claimed: bool = False
     locked: bool = False  # Once claimed, square is locked
+    color: Optional[str] = None  # Custom hex color set by player
+    pattern: Optional[str] = None  # Sports pattern/theme: football, basketball, etc.
 
 class Winner(BaseModel):
     quarter: int  # 1-4
@@ -139,6 +141,12 @@ class RemovePlayerRequest(BaseModel):
 class UpdateScoreRequest(BaseModel):
     score_horizontal: int
     score_vertical: int
+
+class CustomizeSquareRequest(BaseModel):
+    position: int
+    player_name: str
+    color: Optional[str] = None
+    pattern: Optional[str] = None
 
 # API Routes
 @api_router.get("/")
@@ -236,13 +244,16 @@ async def claim_square(code: str, request: ClaimSquareRequest):
             if current_player != request.player_name:
                 raise HTTPException(status_code=400, detail=f"It's {current_player}'s turn")
     
-    # Update the square - lock it immediately
+    # Update the square - lock it immediately and preserve existing color/pattern
+    existing_square = squares[request.position]
     squares[request.position] = {
         'position': request.position,
         'number': request.position + 1,
         'player_name': request.player_name,
         'claimed': True,
-        'locked': True
+        'locked': True,
+        'color': existing_square.get('color'),
+        'pattern': existing_square.get('pattern')
     }
     
     # Handle turn progression
@@ -331,6 +342,7 @@ async def host_claim_square(code: str, request: HostClaimRequest):
         raise HTTPException(status_code=400, detail="Square already claimed")
     
     # Update the square
+    existing_square = squares[request.position]
     if request.as_unclaimed:
         # Mark as unclaimed but locked (reserved spot)
         squares[request.position] = {
@@ -338,7 +350,9 @@ async def host_claim_square(code: str, request: HostClaimRequest):
             'number': request.position + 1,
             'player_name': None,
             'claimed': True,
-            'locked': True
+            'locked': True,
+            'color': existing_square.get('color'),
+            'pattern': existing_square.get('pattern')
         }
     else:
         # Claim for specific player
@@ -347,7 +361,9 @@ async def host_claim_square(code: str, request: HostClaimRequest):
             'number': request.position + 1,
             'player_name': request.player_name,
             'claimed': True,
-            'locked': True
+            'locked': True,
+            'color': existing_square.get('color'),
+            'pattern': existing_square.get('pattern')
         }
     
     # Handle turn progression - count towards player's picks
@@ -688,13 +704,16 @@ async def undo_last_claim(code: str):
     squares = game.get('squares', [])
     position = last_claim.get('position')
     
-    # Reset the square
+    # Reset the square (preserve color/pattern if they were set)
+    existing_square = squares[position]
     squares[position] = {
         'position': position,
         'number': position + 1,
         'player_name': None,
         'claimed': False,
-        'locked': False
+        'locked': False,
+        'color': existing_square.get('color'),
+        'pattern': existing_square.get('pattern')
     }
     
     # Restore turn state
@@ -780,7 +799,9 @@ async def remove_player(code: str, request: RemovePlayerRequest):
                     'number': i + 1,
                     'player_name': None,
                     'claimed': False,
-                    'locked': False
+                    'locked': False,
+                    'color': square.get('color'),
+                    'pattern': square.get('pattern')
                 }
     
     # Remove from players and player_order
@@ -841,6 +862,52 @@ async def update_score(code: str, request: UpdateScoreRequest):
     await sio.emit('score_updated', {
         'score_horizontal': request.score_horizontal,
         'score_vertical': request.score_vertical
+    }, room=code.upper())
+    
+    return updated_game
+
+@api_router.post("/games/{code}/customize-square")
+async def customize_square(code: str, request: CustomizeSquareRequest):
+    """Customize a claimed square's color and/or pattern. Only the player who claimed the square (or host) can customize it."""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    squares = game.get('squares', [])
+    if request.position < 0 or request.position >= 100:
+        raise HTTPException(status_code=400, detail="Invalid position")
+    
+    square = squares[request.position]
+    if not square.get('claimed', False):
+        raise HTTPException(status_code=400, detail="Square is not claimed yet")
+    
+    # Verify ownership: player owns this square OR is the host
+    is_owner = square.get('player_name') == request.player_name
+    is_host = request.player_name == game.get('host_name')
+    if not is_owner and not is_host:
+        raise HTTPException(status_code=403, detail="You can only customize your own squares")
+    
+    # Update color and/or pattern (None means clear)
+    squares[request.position] = {
+        **square,
+        'color': request.color,
+        'pattern': request.pattern,
+    }
+    
+    await db.games.update_one(
+        {"code": code.upper()},
+        {"$set": {"squares": squares}}
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    # Emit socket event
+    await sio.emit('square_customized', {
+        'position': request.position,
+        'color': request.color,
+        'pattern': request.pattern,
+        'squares': updated_game.get('squares', []),
     }, room=code.upper())
     
     return updated_game

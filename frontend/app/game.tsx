@@ -27,6 +27,8 @@ interface Square {
   player_name: string | null;
   claimed: boolean;
   locked: boolean;
+  color?: string | null;
+  pattern?: string | null;
 }
 
 interface Winner {
@@ -73,6 +75,35 @@ interface GameInfo {
 const CELL_SIZE = 32; // Fixed size that fits 10 + label on most phones
 const LABEL_SIZE = 32;
 
+// Customization options
+const COLOR_OPTIONS = [
+  '#E91E63', '#9C27B0', '#3F51B5', '#2196F3',
+  '#00BCD4', '#009688', '#4CAF50', '#8BC34A',
+  '#FFEB3B', '#FF9800', '#F44336', '#795548',
+  '#607D8B', '#000000', '#FFFFFF', '#FFD700',
+];
+
+interface PatternOption {
+  id: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}
+
+const PATTERN_OPTIONS: PatternOption[] = [
+  { id: 'football', label: 'Football', icon: 'american-football' },
+  { id: 'basketball', label: 'Basketball', icon: 'basketball' },
+  { id: 'baseball', label: 'Baseball', icon: 'baseball' },
+  { id: 'soccer', label: 'Soccer', icon: 'football' },
+  { id: 'tennis', label: 'Tennis', icon: 'tennisball' },
+  { id: 'golf', label: 'Golf', icon: 'golf' },
+  { id: 'star', label: 'Star', icon: 'star' },
+  { id: 'flame', label: 'Fire', icon: 'flame' },
+  { id: 'trophy', label: 'Trophy', icon: 'trophy' },
+  { id: 'flash', label: 'Bolt', icon: 'flash' },
+  { id: 'heart', label: 'Heart', icon: 'heart' },
+  { id: 'rocket', label: 'Rocket', icon: 'rocket' },
+];
+
 export default function GameScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
@@ -106,6 +137,11 @@ export default function GameScreen() {
   const [zoomLevel, setZoomLevel] = useState(1);
   const MIN_ZOOM = 0.6;
   const MAX_ZOOM = 2.0;
+  // Square customization state
+  const [showCustomize, setShowCustomize] = useState(false);
+  const [customizePosition, setCustomizePosition] = useState<number | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedPattern, setSelectedPattern] = useState<string | null>(null);
 
   // Zoom controls
   const zoomIn = () => {
@@ -224,6 +260,14 @@ export default function GameScreen() {
       } : null);
     });
 
+    newSocket.on('square_customized', (data) => {
+      console.log('Square customized event received');
+      setGame(prev => prev ? { 
+        ...prev, 
+        squares: data.squares,
+      } : null);
+    });
+
     newSocket.on('numbers_randomized', (data) => {
       setGame(prev => prev ? { 
         ...prev, 
@@ -325,14 +369,21 @@ export default function GameScreen() {
   const claimSquare = async (position: number) => {
     if (!game || !gameInfo) return;
     
+    const square = game.squares[position];
+
+    // If square is already claimed: allow customize if player owns it (or is host)
+    if (square.claimed) {
+      const isOwner = square.player_name === gameInfo.playerName;
+      const isHost = gameInfo.isHost;
+      if (isOwner || (isHost && square.player_name)) {
+        openCustomizeModal(position);
+      }
+      return;
+    }
+
     // Check if board is locked
     if (game.board_locked) {
       return;
-    }
-    
-    const square = game.squares[position];
-    if (square.claimed || square.locked) {
-      return; // Square already claimed/locked - silently ignore
     }
 
     // Check if it's this player's turn
@@ -361,10 +412,51 @@ export default function GameScreen() {
       
       const data = await response.json();
       setGame({...data});
+
+      // Auto-open customize modal so player can pick color/pattern right after claiming
+      setTimeout(() => openCustomizeModal(position), 200);
     } catch (error: any) {
       if (error.message !== 'Square already claimed') {
         Alert.alert('Error', error.message || 'Failed to claim square');
       }
+    }
+  };
+
+  // Open customize modal for a specific square
+  const openCustomizeModal = (position: number) => {
+    if (!game) return;
+    const square = game.squares[position];
+    if (!square || !square.claimed) return;
+    setCustomizePosition(position);
+    setSelectedColor(square.color || null);
+    setSelectedPattern(square.pattern || null);
+    setShowCustomize(true);
+  };
+
+  // Save customization to backend
+  const saveCustomization = async () => {
+    if (!game || !gameInfo || customizePosition === null) return;
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/customize-square`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          position: customizePosition,
+          player_name: gameInfo.playerName,
+          color: selectedColor,
+          pattern: selectedPattern,
+        }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to customize');
+      }
+      const data = await response.json();
+      setGame({ ...data });
+      setShowCustomize(false);
+      setCustomizePosition(null);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to customize square');
     }
   };
 
@@ -702,12 +794,30 @@ export default function GameScreen() {
     if (isCurrentWinningSquare(position)) return '#FFD700'; // Gold color for current winner
     if (square.claimed) {
       if (!square.player_name) return '#666'; // Unclaimed but locked
+      // Use custom color if player has set one
+      if (square.color) return square.color;
       const colors = ['#E91E63', '#9C27B0', '#3F51B5', '#00BCD4', '#FF9800', '#795548', '#607D8B', '#F44336', '#2196F3', '#FFEB3B'];
       const playerOrder = game?.player_order.length ? game.player_order : game?.players || [];
       const index = playerOrder.indexOf(square.player_name);
       return colors[index >= 0 ? index % colors.length : 0];
     }
     return 'rgba(255,255,255,0.08)';
+  };
+
+  // Find pattern icon by id
+  const getPatternIcon = (patternId: string | null | undefined): keyof typeof Ionicons.glyphMap | null => {
+    if (!patternId) return null;
+    const found = PATTERN_OPTIONS.find(p => p.id === patternId);
+    return found ? found.icon : null;
+  };
+
+  // Choose a contrasting text color for a hex bg
+  const isLightColor = (hex: string) => {
+    if (!hex || hex.length < 7) return false;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 155;
   };
 
   const getCurrentTurnPlayer = () => {
@@ -899,6 +1009,13 @@ export default function GameScreen() {
                       const winningQuarters = getWinningQuarters(position);
                       const squareNumber = position + 1;
                       const isLiveWinner = isCurrentWinningSquare(position);
+                      const patternIcon = getPatternIcon(square.pattern);
+                      const cellBgColor = getSquareColor(square, position);
+                      const ownsSquare = square.claimed && square.player_name === gameInfo?.playerName;
+                      const canCustomize = ownsSquare || (gameInfo?.isHost && square.claimed && square.player_name);
+                      // Cell is interactive if: not claimed (claim it), or owner/host can customize
+                      const isInteractive = !square.claimed || canCustomize;
+                      const textColor = square.color && isLightColor(square.color) ? '#000' : '#fff';
                       return (
                         <TouchableOpacity
                           key={`cell-${position}`}
@@ -907,26 +1024,38 @@ export default function GameScreen() {
                             { 
                               width: CELL_SIZE, 
                               height: CELL_SIZE,
-                              backgroundColor: getSquareColor(square, position),
+                              backgroundColor: cellBgColor,
                             },
                             isWinningSquare(position) && styles.winningCell,
                             isLiveWinner && styles.liveWinnerCell,
                             square.locked && styles.lockedCell,
+                            ownsSquare && styles.ownSquare,
                           ]}
                           onPress={() => claimSquare(position)}
                           onLongPress={() => gameInfo?.isHost && openHostClaimModal(position)}
-                          activeOpacity={square.claimed ? 1 : 0.7}
-                          disabled={square.claimed || game.board_locked}
+                          activeOpacity={isInteractive ? 0.7 : 1}
+                          disabled={(!isInteractive) || (game.board_locked && !canCustomize)}
                         >
                           {/* Square Number */}
                           <Text style={[
                             styles.squareNumber,
-                            square.claimed && styles.squareNumberClaimed
+                            square.claimed && styles.squareNumberClaimed,
+                            { color: square.claimed ? (textColor === '#000' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)') : 'rgba(255,255,255,0.4)' }
                           ]}>{squareNumber}</Text>
+
+                          {/* Pattern Icon (background) */}
+                          {patternIcon && square.claimed && (
+                            <Ionicons
+                              name={patternIcon}
+                              size={Math.max(14, CELL_SIZE * 0.55)}
+                              color={textColor === '#000' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.35)'}
+                              style={styles.patternIcon}
+                            />
+                          )}
                           
                           {/* Player Initials */}
                           {square.claimed && square.player_name && (
-                            <Text style={styles.cellText} numberOfLines={1}>
+                            <Text style={[styles.cellText, { color: textColor }]} numberOfLines={1}>
                               {square.player_name.substring(0, 3)}
                             </Text>
                           )}
@@ -1544,6 +1673,160 @@ export default function GameScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Customize Square Modal */}
+      <Modal
+        visible={showCustomize}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCustomize(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Customize Square #{(customizePosition ?? 0) + 1}
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              Pick a color and pattern to make your square stand out
+            </Text>
+
+            {/* Live preview */}
+            <View style={styles.previewRow}>
+              <Text style={styles.previewLabel}>Preview:</Text>
+              <View
+                style={[
+                  styles.previewSquare,
+                  {
+                    backgroundColor:
+                      selectedColor ||
+                      (customizePosition !== null
+                        ? getSquareColor(
+                            game.squares[customizePosition],
+                            customizePosition
+                          )
+                        : '#444'),
+                  },
+                ]}
+              >
+                {selectedPattern && (
+                  <Ionicons
+                    name={getPatternIcon(selectedPattern) || 'help'}
+                    size={32}
+                    color={
+                      selectedColor && isLightColor(selectedColor)
+                        ? 'rgba(0,0,0,0.5)'
+                        : 'rgba(255,255,255,0.7)'
+                    }
+                    style={styles.previewPatternIcon}
+                  />
+                )}
+                {customizePosition !== null && game.squares[customizePosition].player_name && (
+                  <Text
+                    style={[
+                      styles.previewInitials,
+                      {
+                        color:
+                          selectedColor && isLightColor(selectedColor)
+                            ? '#000'
+                            : '#fff',
+                      },
+                    ]}
+                  >
+                    {game.squares[customizePosition].player_name!.substring(0, 3)}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            <ScrollView style={{ maxHeight: 360 }}>
+              {/* Color Picker */}
+              <Text style={styles.sectionLabel}>Color</Text>
+              <View style={styles.colorGrid}>
+                <TouchableOpacity
+                  style={[
+                    styles.colorSwatch,
+                    styles.clearSwatch,
+                    !selectedColor && styles.swatchSelected,
+                  ]}
+                  onPress={() => setSelectedColor(null)}
+                >
+                  <Ionicons name="close" size={18} color="#fff" />
+                </TouchableOpacity>
+                {COLOR_OPTIONS.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[
+                      styles.colorSwatch,
+                      { backgroundColor: c },
+                      selectedColor === c && styles.swatchSelected,
+                    ]}
+                    onPress={() => setSelectedColor(c)}
+                  >
+                    {selectedColor === c && (
+                      <Ionicons
+                        name="checkmark"
+                        size={20}
+                        color={isLightColor(c) ? '#000' : '#fff'}
+                      />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Pattern Picker */}
+              <Text style={styles.sectionLabel}>Sport / Theme</Text>
+              <View style={styles.patternGrid}>
+                <TouchableOpacity
+                  style={[
+                    styles.patternButton,
+                    !selectedPattern && styles.patternButtonSelected,
+                  ]}
+                  onPress={() => setSelectedPattern(null)}
+                >
+                  <Ionicons name="close-circle" size={24} color="#aaa" />
+                  <Text style={styles.patternLabel}>None</Text>
+                </TouchableOpacity>
+                {PATTERN_OPTIONS.map((p) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[
+                      styles.patternButton,
+                      selectedPattern === p.id && styles.patternButtonSelected,
+                    ]}
+                    onPress={() => setSelectedPattern(p.id)}
+                  >
+                    <Ionicons
+                      name={p.icon}
+                      size={24}
+                      color={selectedPattern === p.id ? '#4CAF50' : '#fff'}
+                    />
+                    <Text
+                      style={[
+                        styles.patternLabel,
+                        selectedPattern === p.id && styles.patternLabelSelected,
+                      ]}
+                    >
+                      {p.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity style={styles.saveButton} onPress={saveCustomization}>
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.saveButtonText}>Save Customization</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowCustomize(false)}
+            >
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1801,6 +2084,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 4,
     elevation: 5,
+  },
+  ownSquare: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  patternIcon: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginTop: -CELL_SIZE * 0.275,
+    marginLeft: -CELL_SIZE * 0.275,
+    opacity: 0.8,
   },
   liveWinnerBadge: {
     position: 'absolute',
@@ -2216,5 +2511,97 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     backgroundColor: '#f44336',
+  },
+  // Customize Modal Styles
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 18,
+  },
+  previewLabel: {
+    color: '#aaa',
+    fontSize: 14,
+  },
+  previewSquare: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+  },
+  previewPatternIcon: {
+    position: 'absolute',
+    opacity: 0.7,
+  },
+  previewInitials: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  sectionLabel: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 10,
+    marginTop: 6,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 18,
+  },
+  colorSwatch: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  swatchSelected: {
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  clearSwatch: {
+    backgroundColor: '#333',
+    borderColor: '#666',
+    borderStyle: 'dashed',
+  },
+  patternGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  patternButton: {
+    width: '23%',
+    aspectRatio: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    padding: 4,
+  },
+  patternButtonSelected: {
+    backgroundColor: 'rgba(76,175,80,0.2)',
+    borderColor: '#4CAF50',
+  },
+  patternLabel: {
+    color: '#aaa',
+    fontSize: 10,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  patternLabelSelected: {
+    color: '#4CAF50',
+    fontWeight: '600',
   },
 });
