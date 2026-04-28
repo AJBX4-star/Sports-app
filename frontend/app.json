@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sportssquares.app"
+      "bundleIdentifier": "com.sportssquares.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Pick a photo to customize your squares"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +21,8 @@
         "backgroundColor": "#000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.sportssquares.app"
+      "package": "com.sportssquares.app",
+      "permissions": ["READ_EXTERNAL_STORAGE", "READ_MEDIA_IMAGES"]
     },
     "web": {
       "bundler": "metro",
@@ -36,7 +40,13 @@
           "backgroundColor": "#000"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pick a photo to customize your squares"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

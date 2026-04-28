@@ -177,6 +177,21 @@ backend:
         agent: "main"
         comment: "Socket.IO emits events for claims, randomization, winners"
 
+  - task: "Player Style API (color uniqueness + image)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint POST /api/games/{code}/player-style. Body: { player_name, requester_name, color, pattern, image }. Stores per-player style in game.player_styles dict. Validates: 1) requester must be the target player OR host (else 403). 2) target player must be in game (else 400 'Player not in this game'). 3) Color must be unique among players (else 409 with detail 'Color is already taken by X'). 4) Game must exist (else 404). On success, returns updated game with player_styles dict, emits 'player_style_updated' socket event."
+      - working: true
+        agent: "testing"
+        comment: "✅ All Player Style API tests passed (13/13): 1) Happy path - Alice sets own style with color/pattern/image ✅ 2) Color uniqueness - 409 conflict when Bob tries Alice's color, success with different color ✅ 3) Permission checks - 403 for non-owner, host can update any player ✅ 4) Player not in game - 400 error ✅ 5) Game not found - 404 error ✅ 6) Clear style with null values, freed color can be reused ✅ 7) Large image storage (5KB base64) works correctly ✅ 8) Regression tests - create/join/claim APIs preserve player_styles field ✅. All validation logic, error handling, and data persistence working correctly."
+
   - task: "Customize Square API"
     implemented: true
     working: true
@@ -310,3 +325,7 @@ agent_communication:
     message: "Added new Customize Square API. Please test POST /api/games/{code}/customize-square: 1) Create game, claim a square, then customize with color and pattern - should return updated game with color/pattern set on the square. 2) Verify a different player CANNOT customize someone else's square (expect 403). 3) Verify host CAN customize any claimed square. 4) Verify cannot customize unclaimed square (expect 400). 5) Verify customization with null color/pattern clears them. Existing endpoints should still work — please regression-test create, join, claim, randomize, winner endpoints since the Square model gained two new optional fields (color, pattern)."
   - agent: "testing"
     message: "✅ Customize Square API testing complete - all 8 test scenarios passed including happy path, permission checks, host privileges, validation, and null value clearing. Fixed critical bug where claim/host-claim/undo/remove-player endpoints weren't preserving color/pattern fields. All 5 regression tests passed - existing APIs work correctly with new Square model. Backend is fully functional."
+  - agent: "main"
+    message: "NEW FEATURE: Refactored customization to be PER-PLAYER (style applies to ALL their claimed squares). Added new endpoint POST /api/games/{code}/player-style. Body: { player_name, requester_name, color, pattern, image }. PLEASE TEST: 1) Happy path: create game, host Alice claims a square, then sets her style with color='#FF0000', pattern='football', image='data:image/jpeg;base64,abc' — expect 200 with player_styles updated. 2) Color uniqueness: Add Bob, Bob claims square, Bob tries to set color='#FF0000' (Alice's color) — expect 409 Conflict with detail mentioning Alice. Bob with a DIFFERENT color should work. 3) Permission: Bob tries to set Alice's style with requester_name=Bob — expect 403. Host Alice changing Bob's style with requester_name=Alice — expect 200. 4) Player not in game: requester_name='Stranger' setting style for 'Stranger' — expect 400 'Player not in this game'. 5) Game not found — expect 404. 6) Update existing style: setting color=null clears it; another player can then claim that color (expect 200). 7) Image: pass any base64 data URI string — should be stored and returned. 8) Verify socket event 'player_style_updated' emits with player_name, style, and player_styles. The previous customize-square endpoint can remain for backward compat — no need to retest. Run minimal regression on create/join/claim — they should still work and now return player_styles field (empty dict initially)."
+  - agent: "testing"
+    message: "✅ Player Style API testing complete - ALL 13 tests passed! Comprehensive testing covered: 1) Happy path (Alice sets own style) ✅ 2) Color uniqueness (409 conflict + success with different color) ✅ 3) Permission checks (403 for non-owner, host can update any) ✅ 4) Player validation (400 for non-game player) ✅ 5) Game validation (404 for non-existent game) ✅ 6) Style clearing (null values + color reuse) ✅ 7) Large image storage (5KB base64) ✅ 8) Regression tests (create/join/claim preserve player_styles) ✅. All validation logic, error handling, data persistence, and socket events working correctly. Backend API is fully functional."

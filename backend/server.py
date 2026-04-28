@@ -85,6 +85,9 @@ class Game(BaseModel):
     score_vertical: int = 0  # Score for vertical team
     # Undo history
     last_claim: Optional[Dict] = None  # Last claimed square for undo
+    # Per-player style customization (applied to ALL their claimed squares)
+    # Format: { player_name: { "color": str|None, "pattern": str|None, "image": str|None (base64 data URI) } }
+    player_styles: Dict[str, Dict[str, Optional[str]]] = Field(default_factory=dict)
 
 class CreateGameRequest(BaseModel):
     host_id: str
@@ -147,6 +150,13 @@ class CustomizeSquareRequest(BaseModel):
     player_name: str
     color: Optional[str] = None
     pattern: Optional[str] = None
+
+class SetPlayerStyleRequest(BaseModel):
+    player_name: str  # the player whose style is being set
+    requester_name: str  # who is making the request (player or host)
+    color: Optional[str] = None
+    pattern: Optional[str] = None
+    image: Optional[str] = None  # base64 data URI
 
 # API Routes
 @api_router.get("/")
@@ -910,6 +920,64 @@ async def customize_square(code: str, request: CustomizeSquareRequest):
         'squares': updated_game.get('squares', []),
     }, room=code.upper())
     
+    return updated_game
+
+@api_router.post("/games/{code}/player-style")
+async def set_player_style(code: str, request: SetPlayerStyleRequest):
+    """Set a player's style (color/pattern/image). Style applies to ALL of their claimed squares.
+    Color is unique per game (no two players can use the same color)."""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    target_player = request.player_name
+    requester = request.requester_name
+    host_name = game.get('host_name')
+
+    # Permission check: requester must be the target player OR the host
+    if requester != target_player and requester != host_name:
+        raise HTTPException(status_code=403, detail="You can only customize your own style")
+
+    # Player must exist in the game (or be the host)
+    players = game.get('players', [])
+    if target_player not in players and target_player != host_name:
+        raise HTTPException(status_code=400, detail="Player not in this game")
+
+    # Color uniqueness check: no other player can be using this color
+    if request.color:
+        existing_styles: Dict[str, Dict] = game.get('player_styles', {}) or {}
+        for other_player, style in existing_styles.items():
+            if other_player == target_player:
+                continue
+            if style and style.get('color') == request.color:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Color is already taken by {other_player}"
+                )
+
+    # Update player_styles dict
+    player_styles: Dict[str, Dict] = game.get('player_styles', {}) or {}
+    player_styles[target_player] = {
+        'color': request.color,
+        'pattern': request.pattern,
+        'image': request.image,
+    }
+
+    await db.games.update_one(
+        {"code": code.upper()},
+        {"$set": {"player_styles": player_styles}}
+    )
+
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+
+    # Emit socket event with the new player_styles
+    await sio.emit('player_style_updated', {
+        'player_name': target_player,
+        'style': player_styles[target_player],
+        'player_styles': player_styles,
+    }, room=code.upper())
+
     return updated_game
 
 # Socket.IO events

@@ -12,11 +12,15 @@ import {
   Share,
   Modal,
   TextInput,
+  Image,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io, Socket } from 'socket.io-client';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -35,6 +39,12 @@ interface Winner {
   quarter: number;
   position: number;
   player_name: string | null;
+}
+
+interface PlayerStyle {
+  color?: string | null;
+  pattern?: string | null;
+  image?: string | null; // base64 data URI
 }
 
 interface Game {
@@ -62,6 +72,7 @@ interface Game {
   score_horizontal: number;
   score_vertical: number;
   last_claim: { position: number; player_name: string } | null;
+  player_styles?: { [playerName: string]: PlayerStyle };
 }
 
 interface GameInfo {
@@ -137,11 +148,14 @@ export default function GameScreen() {
   const [zoomLevel, setZoomLevel] = useState(1);
   const MIN_ZOOM = 0.6;
   const MAX_ZOOM = 2.0;
-  // Square customization state
+  // Square customization state (now player-level)
   const [showCustomize, setShowCustomize] = useState(false);
-  const [customizePosition, setCustomizePosition] = useState<number | null>(null);
+  // The player whose style we're editing (usually self; host can edit others)
+  const [customizeTarget, setCustomizeTarget] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedPattern, setSelectedPattern] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [savingStyle, setSavingStyle] = useState(false);
 
   // Zoom controls
   const zoomIn = () => {
@@ -261,10 +275,19 @@ export default function GameScreen() {
     });
 
     newSocket.on('square_customized', (data) => {
+      // Legacy event - still update squares for backward compat
       console.log('Square customized event received');
       setGame(prev => prev ? { 
         ...prev, 
         squares: data.squares,
+      } : null);
+    });
+
+    newSocket.on('player_style_updated', (data) => {
+      console.log('Player style updated:', data.player_name);
+      setGame(prev => prev ? {
+        ...prev,
+        player_styles: data.player_styles,
       } : null);
     });
 
@@ -375,8 +398,10 @@ export default function GameScreen() {
     if (square.claimed) {
       const isOwner = square.player_name === gameInfo.playerName;
       const isHost = gameInfo.isHost;
-      if (isOwner || (isHost && square.player_name)) {
-        openCustomizeModal(position);
+      if (isOwner) {
+        openCustomizeModal(gameInfo.playerName);
+      } else if (isHost && square.player_name) {
+        openCustomizeModal(square.player_name);
       }
       return;
     }
@@ -413,12 +438,17 @@ export default function GameScreen() {
       const data = await response.json();
       setGame({...data});
 
-      // Auto-open customize modal so player can pick color/pattern right after claiming
-      // Set state directly instead of using openCustomizeModal to avoid stale closure
-      setCustomizePosition(position);
-      setSelectedColor(null);
-      setSelectedPattern(null);
-      setTimeout(() => setShowCustomize(true), 250);
+      // Auto-open customize modal on FIRST claim only (so player can set their style once).
+      // If they already have a style, don't bother them again.
+      const myStyle = data?.player_styles?.[gameInfo.playerName];
+      const hasStyle = myStyle && (myStyle.color || myStyle.pattern || myStyle.image);
+      if (!hasStyle) {
+        setCustomizeTarget(gameInfo.playerName);
+        setSelectedColor(null);
+        setSelectedPattern(null);
+        setSelectedImage(null);
+        setTimeout(() => setShowCustomize(true), 250);
+      }
     } catch (error: any) {
       if (error.message !== 'Square already claimed') {
         Alert.alert('Error', error.message || 'Failed to claim square');
@@ -426,29 +456,31 @@ export default function GameScreen() {
     }
   };
 
-  // Open customize modal for a specific square
-  const openCustomizeModal = (position: number) => {
+  // Open customize modal for a specific player (their style)
+  const openCustomizeModal = (playerName: string) => {
     if (!game) return;
-    const square = game.squares[position];
-    if (!square || !square.claimed) return;
-    setCustomizePosition(position);
-    setSelectedColor(square.color || null);
-    setSelectedPattern(square.pattern || null);
+    const existing = game.player_styles?.[playerName] || {};
+    setCustomizeTarget(playerName);
+    setSelectedColor(existing.color || null);
+    setSelectedPattern(existing.pattern || null);
+    setSelectedImage(existing.image || null);
     setShowCustomize(true);
   };
 
-  // Save customization to backend
+  // Save player style to backend
   const saveCustomization = async () => {
-    if (!game || !gameInfo || customizePosition === null) return;
+    if (!game || !gameInfo || !customizeTarget) return;
+    setSavingStyle(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/games/${code}/customize-square`, {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/player-style`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          position: customizePosition,
-          player_name: gameInfo.playerName,
+          player_name: customizeTarget,
+          requester_name: gameInfo.playerName,
           color: selectedColor,
           pattern: selectedPattern,
+          image: selectedImage,
         }),
       });
       if (!response.ok) {
@@ -458,9 +490,54 @@ export default function GameScreen() {
       const data = await response.json();
       setGame({ ...data });
       setShowCustomize(false);
-      setCustomizePosition(null);
+      setCustomizeTarget(null);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to customize square');
+      Alert.alert('Error', error.message || 'Failed to save style');
+    } finally {
+      setSavingStyle(false);
+    }
+  };
+
+  // Pick a custom image from the gallery
+  const pickCustomImage = async () => {
+    try {
+      // Request permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission required',
+          'We need access to your photos to pick a custom image.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+      const asset = result.assets[0];
+
+      // Resize to a small thumbnail to keep the payload small
+      const manipulated = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 200, height: 200 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+
+      if (manipulated.base64) {
+        setSelectedImage(`data:image/jpeg;base64,${manipulated.base64}`);
+      } else if (asset.base64) {
+        // Fallback: some platforms give us base64 directly
+        setSelectedImage(`data:image/jpeg;base64,${asset.base64}`);
+      }
+    } catch (err: any) {
+      console.error('Image pick error', err);
+      Alert.alert('Error', err?.message || 'Failed to pick image');
     }
   };
 
@@ -791,6 +868,12 @@ export default function GameScreen() {
     return getCurrentWinningPosition() === position;
   };
 
+  // Get the player style (color, pattern, image) for any player in this game
+  const getPlayerStyle = (playerName: string | null | undefined): PlayerStyle | null => {
+    if (!playerName || !game) return null;
+    return game.player_styles?.[playerName] || null;
+  };
+
   const getSquareColor = (square: Square, position: number) => {
     // First check if this is an official quarter winner
     if (isWinningSquare(position)) return '#4CAF50';
@@ -798,8 +881,10 @@ export default function GameScreen() {
     if (isCurrentWinningSquare(position)) return '#FFD700'; // Gold color for current winner
     if (square.claimed) {
       if (!square.player_name) return '#666'; // Unclaimed but locked
-      // Use custom color if player has set one
-      if (square.color) return square.color;
+      // Use player's chosen style color if set
+      const style = getPlayerStyle(square.player_name);
+      if (style?.color) return style.color;
+      // Fallback color from a deterministic palette per-player
       const colors = ['#E91E63', '#9C27B0', '#3F51B5', '#00BCD4', '#FF9800', '#795548', '#607D8B', '#F44336', '#2196F3', '#FFEB3B'];
       const playerOrder = game?.player_order.length ? game.player_order : game?.players || [];
       const index = playerOrder.indexOf(square.player_name);
@@ -1013,13 +1098,18 @@ export default function GameScreen() {
                       const winningQuarters = getWinningQuarters(position);
                       const squareNumber = position + 1;
                       const isLiveWinner = isCurrentWinningSquare(position);
-                      const patternIcon = getPatternIcon(square.pattern);
+                      // Get the player's style (color/pattern/image)
+                      const playerStyle = getPlayerStyle(square.player_name);
+                      const styleColor = playerStyle?.color || null;
+                      const stylePattern = playerStyle?.pattern || null;
+                      const styleImage = playerStyle?.image || null;
+                      const patternIcon = getPatternIcon(stylePattern);
                       const cellBgColor = getSquareColor(square, position);
                       const ownsSquare = square.claimed && square.player_name === gameInfo?.playerName;
                       const canCustomize = ownsSquare || (gameInfo?.isHost && square.claimed && square.player_name);
                       // Cell is interactive if: not claimed (claim it), or owner/host can customize
                       const isInteractive = !square.claimed || canCustomize;
-                      const textColor = square.color && isLightColor(square.color) ? '#000' : '#fff';
+                      const textColor = styleColor && isLightColor(styleColor) ? '#000' : '#fff';
                       return (
                         <TouchableOpacity
                           key={`cell-${position}`}
@@ -1040,15 +1130,24 @@ export default function GameScreen() {
                           activeOpacity={isInteractive ? 0.7 : 1}
                           disabled={(!isInteractive) || (game.board_locked && !canCustomize)}
                         >
+                          {/* Custom Image background (if set, fills the cell) */}
+                          {styleImage && square.claimed && (
+                            <Image
+                              source={{ uri: styleImage }}
+                              style={styles.cellImage}
+                              resizeMode="cover"
+                            />
+                          )}
+
                           {/* Square Number */}
                           <Text style={[
                             styles.squareNumber,
                             square.claimed && styles.squareNumberClaimed,
-                            { color: square.claimed ? (textColor === '#000' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)') : 'rgba(255,255,255,0.4)' }
+                            { color: square.claimed ? (textColor === '#000' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)') : 'rgba(255,255,255,0.4)' }
                           ]}>{squareNumber}</Text>
 
-                          {/* Pattern Icon (background) */}
-                          {patternIcon && square.claimed && (
+                          {/* Pattern Icon (background) - hide if image is set */}
+                          {patternIcon && square.claimed && !styleImage && (
                             <Ionicons
                               name={patternIcon}
                               size={Math.max(14, CELL_SIZE * 0.55)}
@@ -1059,7 +1158,14 @@ export default function GameScreen() {
                           
                           {/* Player Initials */}
                           {square.claimed && square.player_name && (
-                            <Text style={[styles.cellText, { color: textColor }]} numberOfLines={1}>
+                            <Text
+                              style={[
+                                styles.cellText,
+                                styleImage && styles.cellTextOnImage,
+                                { color: styleImage ? '#fff' : textColor },
+                              ]}
+                              numberOfLines={1}
+                            >
                               {square.player_name.substring(0, 3)}
                             </Text>
                           )}
@@ -1102,6 +1208,15 @@ export default function GameScreen() {
             <Ionicons name="layers" size={16} color="#2196F3" />
             <Text style={styles.draftInfoText}>{game.picks_per_turn} pick{game.picks_per_turn > 1 ? 's' : ''}/turn</Text>
           </View>
+          {gameInfo?.playerName && (
+            <TouchableOpacity
+              style={styles.myStyleButton}
+              onPress={() => openCustomizeModal(gameInfo.playerName)}
+            >
+              <Ionicons name="color-palette" size={16} color="#fff" />
+              <Text style={styles.myStyleButtonText}>My Style</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Players List */}
@@ -1678,7 +1793,7 @@ export default function GameScreen() {
         </View>
       </Modal>
 
-      {/* Customize Square Modal */}
+      {/* Customize Player Style Modal */}
       <Modal
         visible={showCustomize}
         transparent
@@ -1688,10 +1803,12 @@ export default function GameScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
-              Customize Square #{(customizePosition ?? 0) + 1}
+              {customizeTarget === gameInfo?.playerName
+                ? 'Customize Your Squares'
+                : `Customize ${customizeTarget}'s Squares`}
             </Text>
             <Text style={styles.modalSubtitle}>
-              Pick a color and pattern to make your square stand out
+              Your color, pattern, or image applies to ALL of your claimed squares
             </Text>
 
             {/* Live preview */}
@@ -1700,22 +1817,20 @@ export default function GameScreen() {
               <View
                 style={[
                   styles.previewSquare,
-                  {
-                    backgroundColor:
-                      selectedColor ||
-                      (customizePosition !== null
-                        ? getSquareColor(
-                            game.squares[customizePosition],
-                            customizePosition
-                          )
-                        : '#444'),
-                  },
+                  { backgroundColor: selectedColor || '#444' },
                 ]}
               >
-                {selectedPattern && (
+                {selectedImage && (
+                  <Image
+                    source={{ uri: selectedImage }}
+                    style={StyleSheet.absoluteFill}
+                    resizeMode="cover"
+                  />
+                )}
+                {selectedPattern && !selectedImage && (
                   <Ionicons
                     name={getPatternIcon(selectedPattern) || 'help'}
-                    size={32}
+                    size={36}
                     color={
                       selectedColor && isLightColor(selectedColor)
                         ? 'rgba(0,0,0,0.5)'
@@ -1724,27 +1839,58 @@ export default function GameScreen() {
                     style={styles.previewPatternIcon}
                   />
                 )}
-                {customizePosition !== null && game.squares[customizePosition].player_name && (
+                {customizeTarget && (
                   <Text
                     style={[
                       styles.previewInitials,
+                      selectedImage && styles.cellTextOnImage,
                       {
                         color:
-                          selectedColor && isLightColor(selectedColor)
+                          selectedImage
+                            ? '#fff'
+                            : selectedColor && isLightColor(selectedColor)
                             ? '#000'
                             : '#fff',
                       },
                     ]}
                   >
-                    {game.squares[customizePosition].player_name!.substring(0, 3)}
+                    {customizeTarget.substring(0, 3)}
                   </Text>
                 )}
               </View>
             </View>
 
-            <ScrollView style={{ maxHeight: 360 }}>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {/* Custom Image Section */}
+              <Text style={styles.sectionLabel}>Custom Image (optional)</Text>
+              <View style={styles.imageRow}>
+                <TouchableOpacity
+                  style={styles.imagePickButton}
+                  onPress={pickCustomImage}
+                >
+                  <Ionicons name="image" size={22} color="#4CAF50" />
+                  <Text style={styles.imagePickText}>
+                    {selectedImage ? 'Change Image' : 'Upload Image'}
+                  </Text>
+                </TouchableOpacity>
+                {selectedImage && (
+                  <TouchableOpacity
+                    style={styles.imageClearButton}
+                    onPress={() => setSelectedImage(null)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#ff4444" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <Text style={styles.imageHelp}>
+                Upload a photo or logo. Image will replace the pattern.
+              </Text>
+
               {/* Color Picker */}
               <Text style={styles.sectionLabel}>Color</Text>
+              <Text style={styles.sectionHelp}>
+                Greyed-out colors are taken by other players
+              </Text>
               <View style={styles.colorGrid}>
                 <TouchableOpacity
                   style={[
@@ -1756,25 +1902,42 @@ export default function GameScreen() {
                 >
                   <Ionicons name="close" size={18} color="#fff" />
                 </TouchableOpacity>
-                {COLOR_OPTIONS.map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[
-                      styles.colorSwatch,
-                      { backgroundColor: c },
-                      selectedColor === c && styles.swatchSelected,
-                    ]}
-                    onPress={() => setSelectedColor(c)}
-                  >
-                    {selectedColor === c && (
-                      <Ionicons
-                        name="checkmark"
-                        size={20}
-                        color={isLightColor(c) ? '#000' : '#fff'}
-                      />
-                    )}
-                  </TouchableOpacity>
-                ))}
+                {COLOR_OPTIONS.map((c) => {
+                  const takenBy = (() => {
+                    if (!game.player_styles) return null;
+                    for (const [pName, st] of Object.entries(game.player_styles)) {
+                      if (pName === customizeTarget) continue;
+                      if (st && st.color === c) return pName;
+                    }
+                    return null;
+                  })();
+                  const isTaken = !!takenBy;
+                  const isSelected = selectedColor === c;
+                  return (
+                    <TouchableOpacity
+                      key={c}
+                      style={[
+                        styles.colorSwatch,
+                        { backgroundColor: c },
+                        isSelected && styles.swatchSelected,
+                        isTaken && styles.colorSwatchTaken,
+                      ]}
+                      onPress={() => !isTaken && setSelectedColor(c)}
+                      disabled={isTaken}
+                    >
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark"
+                          size={20}
+                          color={isLightColor(c) ? '#000' : '#fff'}
+                        />
+                      )}
+                      {isTaken && (
+                        <Ionicons name="lock-closed" size={14} color="#fff" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               {/* Pattern Picker */}
@@ -1817,9 +1980,19 @@ export default function GameScreen() {
               </View>
             </ScrollView>
 
-            <TouchableOpacity style={styles.saveButton} onPress={saveCustomization}>
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
-              <Text style={styles.saveButtonText}>Save Customization</Text>
+            <TouchableOpacity
+              style={[styles.saveButton, savingStyle && styles.disabledButton]}
+              onPress={saveCustomization}
+              disabled={savingStyle}
+            >
+              {savingStyle ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                  <Text style={styles.saveButtonText}>Save</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -2101,6 +2274,20 @@ const styles = StyleSheet.create({
     marginLeft: -CELL_SIZE * 0.275,
     opacity: 0.8,
   },
+  cellImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
+  cellTextOnImage: {
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   liveWinnerBadge: {
     position: 'absolute',
     top: 1,
@@ -2158,6 +2345,22 @@ const styles = StyleSheet.create({
   draftInfoText: {
     color: '#aaa',
     fontSize: 12,
+  },
+  myStyleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(76,175,80,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(76,175,80,0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  myStyleButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   playersSection: {
     marginBottom: 12,
@@ -2572,10 +2775,60 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#fff',
   },
+  colorSwatchTaken: {
+    opacity: 0.25,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
   clearSwatch: {
     backgroundColor: '#333',
     borderColor: '#666',
     borderStyle: 'dashed',
+  },
+  sectionHelp: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: -6,
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  imageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  imagePickButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(76,175,80,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(76,175,80,0.4)',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  imagePickText: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  imageClearButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,68,68,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,68,68,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageHelp: {
+    color: '#888',
+    fontSize: 11,
+    marginBottom: 14,
+    fontStyle: 'italic',
   },
   patternGrid: {
     flexDirection: 'row',
