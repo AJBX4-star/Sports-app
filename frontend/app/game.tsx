@@ -137,6 +137,10 @@ export default function GameScreen() {
   const [scoreV, setScoreV] = useState('');
   const [showPlayerOrder, setShowPlayerOrder] = useState(false);
   const [showHostClaim, setShowHostClaim] = useState(false);
+  // Host action menu (when host long-presses a CLAIMED square)
+  const [showHostAction, setShowHostAction] = useState(false);
+  const [hostActionPosition, setHostActionPosition] = useState<number | null>(null);
+  const [releasingSquare, setReleasingSquare] = useState(false);
   const [hostClaimPosition, setHostClaimPosition] = useState<number | null>(null);
   const [hostClaimPlayer, setHostClaimPlayer] = useState('');
   const [hostClaimAsUnclaimed, setHostClaimAsUnclaimed] = useState(false);
@@ -408,14 +412,17 @@ export default function GameScreen() {
     
     const square = game.squares[position];
 
-    // If square is already claimed: allow customize if player owns it (or is host)
+    // If square is already claimed: behavior depends on who's tapping
     if (square.claimed) {
       const isOwner = square.player_name === gameInfo.playerName;
       const isHost = gameInfo.isHost;
       if (isOwner) {
+        // Owner taps own square → customize their own style
         openCustomizeModal(gameInfo.playerName);
       } else if (isHost && square.player_name) {
-        openCustomizeModal(square.player_name);
+        // Host taps someone else's square → show action menu (Customize / Remove)
+        setHostActionPosition(position);
+        setShowHostAction(true);
       }
       return;
     }
@@ -587,12 +594,68 @@ export default function GameScreen() {
 
   const openHostClaimModal = (position: number) => {
     if (!gameInfo?.isHost) return;
-    if (game?.squares[position].claimed) return;
-    
+    // If square is CLAIMED, show host action menu (customize / remove pick) instead
+    if (game?.squares[position].claimed) {
+      setHostActionPosition(position);
+      setShowHostAction(true);
+      return;
+    }
     setHostClaimPosition(position);
     setHostClaimPlayer(gameInfo.playerName);
     setHostClaimAsUnclaimed(false);
     setShowHostClaim(true);
+  };
+
+  // Host-only: release a specific claimed square (remove erroneous pick)
+  const releaseSquare = async (position: number) => {
+    if (!game || !gameInfo?.isHost) return;
+    setReleasingSquare(true);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/games/${code}/release-square`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          position,
+          host_name: gameInfo.playerName,
+        }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to release square');
+      }
+      const data = await response.json();
+      setGame({ ...data });
+      setShowHostAction(false);
+      setHostActionPosition(null);
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to remove pick');
+    } finally {
+      setReleasingSquare(false);
+    }
+  };
+
+  // Confirm before releasing - works on web + native
+  const confirmReleaseSquare = (position: number) => {
+    if (!game) return;
+    const square = game.squares[position];
+    const playerName = square.player_name || 'this player';
+    const message = `Remove pick for square #${position + 1} (claimed by ${playerName})? This action cannot be undone.`;
+
+    if (Platform.OS === 'web') {
+      // window.confirm works reliably on web where Alert.alert fallback may not show buttons
+      // eslint-disable-next-line no-undef
+      const ok = typeof window !== 'undefined' && window.confirm(message);
+      if (ok) releaseSquare(position);
+    } else {
+      Alert.alert(
+        'Remove Pick?',
+        message,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Remove', style: 'destructive', onPress: () => releaseSquare(position) },
+        ]
+      );
+    }
   };
 
   const randomizeNumbers = async () => {
@@ -1696,6 +1759,66 @@ export default function GameScreen() {
             <TouchableOpacity
               style={styles.closeButton}
               onPress={() => setShowHostClaim(false)}
+            >
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Host Action Modal — appears when host long-presses a CLAIMED square */}
+      <Modal
+        visible={showHostAction}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHostAction(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Square #{(hostActionPosition ?? 0) + 1}
+            </Text>
+            {hostActionPosition !== null && game?.squares[hostActionPosition]?.player_name && (
+              <Text style={styles.modalSubtitle}>
+                Currently claimed by {game.squares[hostActionPosition].player_name}
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: '#1976D2' }]}
+              onPress={() => {
+                if (hostActionPosition === null) return;
+                const playerName = game?.squares[hostActionPosition]?.player_name;
+                setShowHostAction(false);
+                if (playerName) {
+                  setTimeout(() => openCustomizeModal(playerName), 200);
+                }
+              }}
+            >
+              <Ionicons name="color-palette" size={22} color="#fff" />
+              <Text style={styles.modalButtonText}>Customize Style</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalButton, styles.removeButton, releasingSquare && styles.disabledButton]}
+              onPress={() =>
+                hostActionPosition !== null && confirmReleaseSquare(hostActionPosition)
+              }
+              disabled={releasingSquare}
+            >
+              {releasingSquare ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="trash" size={22} color="#fff" />
+                  <Text style={styles.modalButtonText}>Remove Pick</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowHostAction(false)}
             >
               <Text style={styles.closeButtonText}>Cancel</Text>
             </TouchableOpacity>

@@ -192,7 +192,22 @@ backend:
         agent: "testing"
         comment: "✅ All Player Style API tests passed (13/13): 1) Happy path - Alice sets own style with color/pattern/image ✅ 2) Color uniqueness - 409 conflict when Bob tries Alice's color, success with different color ✅ 3) Permission checks - 403 for non-owner, host can update any player ✅ 4) Player not in game - 400 error ✅ 5) Game not found - 404 error ✅ 6) Clear style with null values, freed color can be reused ✅ 7) Large image storage (5KB base64) works correctly ✅ 8) Regression tests - create/join/claim APIs preserve player_styles field ✅. All validation logic, error handling, and data persistence working correctly."
 
-  - task: "Customize Square API"
+  - task: "Customize Square API (legacy per-square)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint: POST /api/games/{code}/customize-square allows the player who claimed a square (or host) to set color and/or pattern. Validates ownership: returns 403 if non-owner non-host, 400 if square not claimed, 404 if game not found. Persists color/pattern to MongoDB, emits 'square_customized' socket event."
+      - working: true
+        agent: "testing"
+        comment: "✅ All Customize Square API tests passed: Happy path, permission checks, host privileges, validation, null value clearing. Fixed critical bug where claim endpoints weren't preserving color/pattern fields. Note: superseded by Player Style API but kept for backward compat."
+
+  - task: "Release Square API (Host removes erroneous picks)"
     implemented: true
     working: true
     file: "/app/backend/server.py"
@@ -202,10 +217,10 @@ backend:
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "New endpoint: POST /api/games/{code}/customize-square allows the player who claimed a square (or host) to set color and/or pattern. Validates ownership: returns 403 if non-owner non-host, 400 if square not claimed, 404 if game not found. Persists color/pattern to MongoDB, emits 'square_customized' socket event."
+        comment: "New endpoint POST /api/games/{code}/release-square. Body: { position, host_name }. Host-only — removes any claimed square (not just the last one), resets to unclaimed, unlocks the board, and clears last_claim if it matches. Validates: 403 if non-host, 400 if square unclaimed or position invalid, 404 if game not found, 400 if a winner has already been declared on that square. Emits 'square_unclaimed' socket event with reason='host_release'."
       - working: true
         agent: "testing"
-        comment: "✅ All Customize Square API tests passed: Happy path (player customizes own square), permission checks (403 for non-owners), host privileges (can customize any square), validation (400 for unclaimed squares, invalid positions), game not found (404), and null value clearing. Fixed critical bug in claim endpoints that weren't preserving color/pattern fields. All regression tests passed - existing APIs work correctly with new Square model fields."
+        comment: "✅ ALL Release Square API tests passed (9/9): 1) Happy path - Host releases player's pick, square properly reset to unclaimed/unlocked, board unlocked ✅ 2) Permission check - Non-host gets 403 'Only the host can release squares' ✅ 3) Cannot release unclaimed square - 400 'Square is not claimed' ✅ 4) Cannot release winning square - 400 with 'already won' message ✅ 5) Game not found - 404 ✅ 6) Invalid positions (-1, 100) - 400 'Invalid position' ✅ 7) Released square can be re-claimed - Successfully re-claimed after proper turn progression ✅ 8) Regression test - End-to-end flow (create→join→claim→randomize→winner) works ✅. All validation logic, error handling, permission checks, and data persistence working correctly. Socket events properly emitted."
 
 frontend:
   - task: "Home Screen"
@@ -329,3 +344,7 @@ agent_communication:
     message: "NEW FEATURE: Refactored customization to be PER-PLAYER (style applies to ALL their claimed squares). Added new endpoint POST /api/games/{code}/player-style. Body: { player_name, requester_name, color, pattern, image }. PLEASE TEST: 1) Happy path: create game, host Alice claims a square, then sets her style with color='#FF0000', pattern='football', image='data:image/jpeg;base64,abc' — expect 200 with player_styles updated. 2) Color uniqueness: Add Bob, Bob claims square, Bob tries to set color='#FF0000' (Alice's color) — expect 409 Conflict with detail mentioning Alice. Bob with a DIFFERENT color should work. 3) Permission: Bob tries to set Alice's style with requester_name=Bob — expect 403. Host Alice changing Bob's style with requester_name=Alice — expect 200. 4) Player not in game: requester_name='Stranger' setting style for 'Stranger' — expect 400 'Player not in this game'. 5) Game not found — expect 404. 6) Update existing style: setting color=null clears it; another player can then claim that color (expect 200). 7) Image: pass any base64 data URI string — should be stored and returned. 8) Verify socket event 'player_style_updated' emits with player_name, style, and player_styles. The previous customize-square endpoint can remain for backward compat — no need to retest. Run minimal regression on create/join/claim — they should still work and now return player_styles field (empty dict initially)."
   - agent: "testing"
     message: "✅ Player Style API testing complete - ALL 13 tests passed! Comprehensive testing covered: 1) Happy path (Alice sets own style) ✅ 2) Color uniqueness (409 conflict + success with different color) ✅ 3) Permission checks (403 for non-owner, host can update any) ✅ 4) Player validation (400 for non-game player) ✅ 5) Game validation (404 for non-existent game) ✅ 6) Style clearing (null values + color reuse) ✅ 7) Large image storage (5KB base64) ✅ 8) Regression tests (create/join/claim preserve player_styles) ✅. All validation logic, error handling, data persistence, and socket events working correctly. Backend API is fully functional."
+  - agent: "main"
+    message: "NEW FEATURE: Added Release Square API endpoint POST /api/games/{code}/release-square for host to remove erroneous picks. Body: { position: int (0-99), host_name: str }. Host-only feature that resets any claimed square back to unclaimed state, unlocks board, clears last_claim if needed. Validates permissions, square state, winner conflicts. Emits 'square_unclaimed' socket event. PLEASE TEST all scenarios from review request: happy path, permission checks, validation, winner conflicts, re-claiming capability, and regression testing."
+  - agent: "testing"
+    message: "✅ Release Square API testing complete - ALL 9 tests passed! Comprehensive testing covered: 1) Happy path - Host releases player's pick, square properly reset ✅ 2) Permission check - Non-host gets 403 ✅ 3) Cannot release unclaimed square - 400 error ✅ 4) Cannot release winning square - 400 with proper message ✅ 5) Game not found - 404 ✅ 6) Invalid positions - 400 errors ✅ 7) Released square can be re-claimed after proper turn progression ✅ 8) Regression test - End-to-end flow works ✅. All validation logic, error handling, permission checks, data persistence, and socket events working correctly. Backend API is fully functional."

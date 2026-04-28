@@ -151,6 +151,10 @@ class CustomizeSquareRequest(BaseModel):
     color: Optional[str] = None
     pattern: Optional[str] = None
 
+class ReleaseSquareRequest(BaseModel):
+    position: int
+    host_name: str  # who's making the request - must equal game.host_name
+
 class SetPlayerStyleRequest(BaseModel):
     player_name: str  # the player whose style is being set
     requester_name: str  # who is making the request (player or host)
@@ -749,6 +753,70 @@ async def undo_last_claim(code: str):
         'position': position,
         'squares': updated_game.get('squares', []),
         'current_turn': last_claim.get('previous_turn', 0)
+    }, room=code.upper())
+    
+    return updated_game
+
+@api_router.post("/games/{code}/release-square")
+async def release_square(code: str, request: ReleaseSquareRequest):
+    """Host-only: release/remove a specific claimed square (any pick, not just last).
+    Used to fix erroneous picks. Resets the square to unclaimed and unlocks the board."""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    # Permission check: must be host
+    if request.host_name != game.get('host_name'):
+        raise HTTPException(status_code=403, detail="Only the host can release squares")
+    
+    if request.position < 0 or request.position >= 100:
+        raise HTTPException(status_code=400, detail="Invalid position")
+    
+    squares = game.get('squares', [])
+    existing_square = squares[request.position]
+    
+    if not existing_square.get('claimed', False):
+        raise HTTPException(status_code=400, detail="Square is not claimed")
+    
+    # If this game has winners already declared on this square, prevent release
+    winners = game.get('winners', [])
+    has_winner_on_square = any(w.get('position') == request.position for w in winners)
+    if has_winner_on_square:
+        raise HTTPException(status_code=400, detail="Cannot release a square that has already won a quarter")
+    
+    released_player = existing_square.get('player_name')
+    
+    # Reset the square (preserve any per-square legacy color/pattern just in case)
+    squares[request.position] = {
+        'position': request.position,
+        'number': request.position + 1,
+        'player_name': None,
+        'claimed': False,
+        'locked': False,
+        'color': None,
+        'pattern': None,
+    }
+    
+    # Update database; if this was the last_claim, also clear it (so undo doesn't double-undo)
+    update_doc = {"squares": squares, "board_locked": False}
+    last_claim = game.get('last_claim') or {}
+    if last_claim.get('position') == request.position:
+        update_doc["last_claim"] = None
+    
+    await db.games.update_one(
+        {"code": code.upper()},
+        {"$set": update_doc}
+    )
+    
+    updated_game = await db.games.find_one({"code": code.upper()})
+    updated_game.pop('_id', None)
+    
+    # Emit socket event so all clients update in real-time
+    await sio.emit('square_unclaimed', {
+        'position': request.position,
+        'squares': updated_game.get('squares', []),
+        'released_player': released_player,
+        'reason': 'host_release',
     }, room=code.upper())
     
     return updated_game
