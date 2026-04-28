@@ -141,6 +141,7 @@ export default function GameScreen() {
   const [showHostAction, setShowHostAction] = useState(false);
   const [hostActionPosition, setHostActionPosition] = useState<number | null>(null);
   const [releasingSquare, setReleasingSquare] = useState(false);
+  const [confirmRelease, setConfirmRelease] = useState(false);
   const [hostClaimPosition, setHostClaimPosition] = useState<number | null>(null);
   const [hostClaimPlayer, setHostClaimPlayer] = useState('');
   const [hostClaimAsUnclaimed, setHostClaimAsUnclaimed] = useState(false);
@@ -609,6 +610,7 @@ export default function GameScreen() {
   // Host-only: release a specific claimed square (remove erroneous pick)
   const releaseSquare = async (position: number) => {
     if (!game || !gameInfo?.isHost) return;
+    console.log('[releaseSquare] Releasing position', position);
     setReleasingSquare(true);
     try {
       const response = await fetch(`${BACKEND_URL}/api/games/${code}/release-square`, {
@@ -627,34 +629,12 @@ export default function GameScreen() {
       setGame({ ...data });
       setShowHostAction(false);
       setHostActionPosition(null);
+      setConfirmRelease(false);
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to remove pick');
+      setConfirmRelease(false);
     } finally {
       setReleasingSquare(false);
-    }
-  };
-
-  // Confirm before releasing - works on web + native
-  const confirmReleaseSquare = (position: number) => {
-    if (!game) return;
-    const square = game.squares[position];
-    const playerName = square.player_name || 'this player';
-    const message = `Remove pick for square #${position + 1} (claimed by ${playerName})? This action cannot be undone.`;
-
-    if (Platform.OS === 'web') {
-      // window.confirm works reliably on web where Alert.alert fallback may not show buttons
-      // eslint-disable-next-line no-undef
-      const ok = typeof window !== 'undefined' && window.confirm(message);
-      if (ok) releaseSquare(position);
-    } else {
-      Alert.alert(
-        'Remove Pick?',
-        message,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Remove', style: 'destructive', onPress: () => releaseSquare(position) },
-        ]
-      );
     }
   };
 
@@ -1771,7 +1751,10 @@ export default function GameScreen() {
         visible={showHostAction}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowHostAction(false)}
+        onRequestClose={() => {
+          setShowHostAction(false);
+          setConfirmRelease(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -1790,6 +1773,7 @@ export default function GameScreen() {
                 if (hostActionPosition === null) return;
                 const playerName = game?.squares[hostActionPosition]?.player_name;
                 setShowHostAction(false);
+                setConfirmRelease(false);
                 if (playerName) {
                   setTimeout(() => openCustomizeModal(playerName), 200);
                 }
@@ -1799,26 +1783,44 @@ export default function GameScreen() {
               <Text style={styles.modalButtonText}>Customize Style</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.modalButton, styles.removeButton, releasingSquare && styles.disabledButton]}
-              onPress={() =>
-                hostActionPosition !== null && confirmReleaseSquare(hostActionPosition)
-              }
-              disabled={releasingSquare}
-            >
-              {releasingSquare ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="trash" size={22} color="#fff" />
-                  <Text style={styles.modalButtonText}>Remove Pick</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {/* Two-step in-app confirmation - first click arms, second click executes */}
+            {!confirmRelease ? (
+              <TouchableOpacity
+                style={[styles.modalButton, styles.removeButton]}
+                onPress={() => setConfirmRelease(true)}
+              >
+                <Ionicons name="trash" size={22} color="#fff" />
+                <Text style={styles.modalButtonText}>Remove Pick</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.confirmRemoveButton,
+                  releasingSquare && styles.disabledButton,
+                ]}
+                onPress={() =>
+                  hostActionPosition !== null && releaseSquare(hostActionPosition)
+                }
+                disabled={releasingSquare}
+              >
+                {releasingSquare ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="warning" size={22} color="#fff" />
+                    <Text style={styles.modalButtonText}>Tap to Confirm Remove</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.closeButton}
-              onPress={() => setShowHostAction(false)}
+              onPress={() => {
+                setShowHostAction(false);
+                setConfirmRelease(false);
+              }}
             >
               <Text style={styles.closeButtonText}>Cancel</Text>
             </TouchableOpacity>
@@ -3058,6 +3060,11 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     backgroundColor: '#f44336',
+  },
+  confirmRemoveButton: {
+    backgroundColor: '#b71c1c',
+    borderWidth: 2,
+    borderColor: '#FFA726',
   },
   // Customize Modal Styles
   previewRow: {
