@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -172,6 +172,70 @@ export default function GameScreen() {
   const [chatVisible, setChatVisible] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  // Track the most recent message id we've seen, so polling fallback knows what's new
+  const lastSeenMsgIdRef = useRef<string | null>(null);
+
+  // Keep lastSeenMsgIdRef in sync with chatMessages
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      lastSeenMsgIdRef.current = chatMessages[chatMessages.length - 1].id;
+    }
+  }, [chatMessages]);
+
+  // Unread polling fallback: only runs when chat is closed AND socket is disconnected
+  useEffect(() => {
+    if (!code || !gameInfo?.playerName) return;
+    if (chatVisible) return; // chat is open — Chat.tsx handles its own loading
+    if (socket?.connected) return; // socket alive — events deliver messages
+
+    const playerName = gameInfo.playerName;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/games/${code}/messages?limit=20`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const msgs: ChatMessage[] = data.messages || [];
+        if (msgs.length === 0) return;
+
+        const lastSeen = lastSeenMsgIdRef.current;
+        // If we've never seen any, baseline silently to avoid spurious badge on first poll
+        if (!lastSeen) {
+          lastSeenMsgIdRef.current = msgs[msgs.length - 1].id;
+          return;
+        }
+        // Find new messages after lastSeen that aren't from me and aren't system
+        const idx = msgs.findIndex((m) => m.id === lastSeen);
+        const newMsgs = idx === -1 ? msgs : msgs.slice(idx + 1);
+        const incoming = newMsgs.filter(
+          (m) => m.player_name !== playerName && m.player_name !== 'SYSTEM' && !m.deleted
+        );
+        if (incoming.length > 0) {
+          setChatUnread((prev) => prev + incoming.length);
+          // Update cached messages so Chat opens with the latest history
+          setChatMessages((prev) => {
+            const seen = new Set(prev.map((p) => p.id));
+            const merged = [...prev];
+            for (const m of msgs) if (!seen.has(m.id)) merged.push(m);
+            return merged;
+          });
+        }
+        lastSeenMsgIdRef.current = msgs[msgs.length - 1].id;
+      } catch {
+        // silent
+      }
+    };
+
+    const interval = setInterval(poll, 5000);
+    // Kick one off immediately so the badge updates quickly after reconnect failure
+    poll();
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [code, gameInfo?.playerName, chatVisible, socket?.connected]);
 
   // Zoom controls
   const zoomIn = () => {
