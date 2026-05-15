@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Privacy Policy for Sports Squares — how we collect, use, and protect your information." />
+  <meta name="robots" content="index, follow" />
+  <title>Privacy Policy · Sports Squares</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --card: #20203a;
+      --accent: #4CAF50;
+      --text: #ffffff;
+      --muted: rgba(255, 255, 255, 0.7);
+      --subtle: rgba(255, 255, 255, 0.55);
+      --border: rgba(255, 255, 255, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .shield {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: rgba(76, 175, 80, 0.12);
+      margin-bottom: 16px;
+    }
+
+    .shield svg { width: 40px; height: 40px; color: var(--accent); }
+
+    h1 {
+      font-size: 32px;
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+
+    .updated {
+      color: var(--subtle);
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 28px 8px;
+      margin-bottom: 24px;
+    }
+
+    section { margin-bottom: 28px; }
+    section:last-child { margin-bottom: 12px; }
+
+    h2 {
+      color: var(--accent);
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 10px;
+    }
+
+    p, ul {
+      color: var(--muted);
+      font-size: 15px;
+      margin: 0 0 10px;
+    }
+
+    ul {
+      padding-left: 22px;
+    }
+
+    li { margin-bottom: 6px; }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+
+    .contact-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #fff !important;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    .contact-btn:hover { text-decoration: none; opacity: 0.92; }
+
+    footer {
+      text-align: center;
+      color: var(--subtle);
+      font-size: 12px;
+      margin-top: 40px;
+    }
+
+    @media (max-width: 600px) {
+      .container { padding: 28px 16px 60px; }
+      h1 { font-size: 26px; }
+      .card { padding: 20px 18px 6px; border-radius: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <div class="shield" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="m9 12 2 2 4-4"/>
+        </svg>
+      </div>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: <strong>February 2026</strong></p>
+    </header>
+
+    <div class="card">
+      <section>
+        <h2>Introduction</h2>
+        <p>This Privacy Policy explains how <strong>Sports Squares</strong> ("we", "us", "our") collects, uses, and protects your information when you use the app. By using the app, you agree to the practices described here.</p>
+      </section>
+
+      <section>
+        <h2>Information We Collect</h2>
+        <p>We collect only the minimum data needed to run the game:</p>
+        <ul>
+          <li>Display name you choose when creating or joining a game</li>
+          <li>Game data: the game code, your square picks, team names, scores, winners, and player order</li>
+          <li>Chat messages you send in a game, including any images you choose to share</li>
+          <li>Device permissions you grant (photo library access to attach images)</li>
+        </ul>
+        <p>We do not collect your real name, email address, phone number, contacts, location, advertising ID, or any biometric data. We do not use third-party analytics or advertising trackers.</p>
+      </section>
+
+      <section>
+        <h2>How We Use Your Information</h2>
+        <p>Your information is used solely to:</p>
+        <ul>
+          <li>Run the multiplayer squares game (sync the board, picks, and chat between players in your game)</li>
+          <li>Show your display name and chat messages to other players in the same game room</li>
+          <li>Persist your saved games on your device so you can rejoin them later</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Where Your Data Is Stored</h2>
+        <p>Game state, chat messages (including images you share), and player styles are stored on our backend server in a MongoDB database.</p>
+        <p>Your list of "My Games" (game codes, display name, host flag) is stored only on your device using local storage (AsyncStorage). It is never transmitted to us beyond what is needed to rejoin a game.</p>
+        <p>Chat images are resized client-side and stored as base64 strings attached to the chat message.</p>
+      </section>
+
+      <section>
+        <h2>Permissions</h2>
+        <p>The app may ask for these device permissions:</p>
+        <ul>
+          <li><strong>Photo Library / Photos</strong> — only used when you tap the image button to attach a picture to a chat message or set a custom square image. Access is requested at the time you use the feature and can be revoked anytime in your device settings.</li>
+          <li><strong>Camera (iOS)</strong> — optional, only used if you choose to take a photo for chat instead of picking from your library.</li>
+        </ul>
+        <p>We do not access your photos in the background.</p>
+      </section>
+
+      <section>
+        <h2>Sharing With Others</h2>
+        <p>We do not sell, rent, or share your data with third parties for marketing.</p>
+        <p>Information shown to other players in your game room (your chosen display name, your square picks, your chat messages, and any images you attach in chat) is visible only to other players who have the same game code. The host of a game can delete chat messages and mute players.</p>
+      </section>
+
+      <section>
+        <h2>Data Retention</h2>
+        <p>Game data and chat messages persist on our server while the game is active. We may periodically delete old game data that has been inactive for an extended period. You can leave a game at any time, and the host can release squares or remove players.</p>
+        <p>Saved games stored on your device can be deleted from the "My Games" screen at any time.</p>
+      </section>
+
+      <section>
+        <h2>Children's Privacy</h2>
+        <p>Sports Squares is not directed at children under 13. We do not knowingly collect personal information from children. If you believe a child has provided us with information, please contact us so we can remove it.</p>
+      </section>
+
+      <section>
+        <h2>Security</h2>
+        <p>We use industry-standard practices to protect data in transit (HTTPS) and at rest. However, no method of transmission or storage is 100% secure, so we cannot guarantee absolute security.</p>
+      </section>
+
+      <section>
+        <h2>Your Choices</h2>
+        <ul>
+          <li>You can stop using the app at any time.</li>
+          <li>You can revoke photo/camera permissions in your device settings.</li>
+          <li>You can delete saved games locally from the "My Games" screen.</li>
+          <li>You can request deletion of chat messages or game data tied to your display name by emailing us.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Changes to This Policy</h2>
+        <p>We may update this policy from time to time. The "Last updated" date at the top will change to reflect any updates. Continued use of the app after a change means you accept the updated policy.</p>
+      </section>
+
+      <section>
+        <h2>Contact Us</h2>
+        <p>Questions about this policy or your data? Reach out anytime:</p>
+        <a class="contact-btn" href="mailto:support@sportssquares.app">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+          support@sportssquares.app
+        </a>
+      </section>
+    </div>
+
+    <footer>
+      © <span id="year"></span> Sports Squares. All rights reserved.
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
