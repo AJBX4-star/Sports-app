@@ -3,26 +3,36 @@
     "name": "Sports Squares",
     "slug": "sports-squares",
     "version": "1.0.0",
+    "description": "The ultimate multiplayer Sports Squares game — host or join a 10x10 squares pool for any game, customize your squares, chat with players, and pick winners by quarter.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "sports-squares",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "primaryColor": "#4CAF50",
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sportssquares.app",
+      "buildNumber": "1",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Pick a photo to customize your squares"
+        "NSPhotoLibraryUsageDescription": "Pick a photo to customize your squares or share in chat",
+        "NSCameraUsageDescription": "Take a photo to share in game chat",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.sportssquares.app",
-      "permissions": ["READ_EXTERNAL_STORAGE", "READ_MEDIA_IMAGES"]
+      "versionCode": 1,
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -34,22 +44,26 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#000000"
         }
       ],
       "expo-web-browser",
       [
         "expo-image-picker",
         {
-          "photosPermission": "Pick a photo to customize your squares"
+          "photosPermission": "Pick a photo to customize your squares or share in chat",
+          "cameraPermission": "Take a photo to share in game chat"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "privacyPolicyUrl": "https://sportssquares.app/privacy"
     }
   }
 }

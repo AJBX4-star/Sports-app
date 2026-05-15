@@ -190,6 +190,16 @@ export default function HomeScreen() {
                 <Text style={styles.footerText}>Perfect for Game Day!</Text>
                 <Ionicons name="football" size={20} color="#4CAF50" />
               </View>
+
+              {/* Privacy Policy Link */}
+              <TouchableOpacity
+                onPress={() => router.push('/privacy')}
+                style={styles.privacyLink}
+                hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}
+              >
+                <Ionicons name="shield-checkmark-outline" size={14} color="rgba(255,255,255,0.55)" />
+                <Text style={styles.privacyLinkText}>Privacy Policy</Text>
+              </TouchableOpacity>
             </ScrollView>
           </SafeAreaView>
         </View>
@@ -417,6 +427,19 @@ const styles = StyleSheet.create({
   footerText: {
     color: '#888',
     fontSize: 14,
+  },
+  privacyLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  privacyLinkText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
   // My Games styles
   myGamesButton: {
