@@ -88,6 +88,18 @@ class Game(BaseModel):
     # Per-player style customization (applied to ALL their claimed squares)
     # Format: { player_name: { "color": str|None, "pattern": str|None, "image": str|None (base64 data URI) } }
     player_styles: Dict[str, Dict[str, Optional[str]]] = Field(default_factory=dict)
+    # Host moderation: list of player names that are muted (cannot send messages)
+    muted_players: List[str] = Field(default_factory=list)
+
+class ChatMessage(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    game_code: str
+    player_name: str  # or "SYSTEM" for system messages
+    type: str = "text"  # "text" | "image" | "system"
+    content: str  # text or base64 data URI for images
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    deleted: bool = False
+    deleted_by: Optional[str] = None
 
 class CreateGameRequest(BaseModel):
     host_id: str
@@ -162,6 +174,22 @@ class SetPlayerStyleRequest(BaseModel):
     pattern: Optional[str] = None
     image: Optional[str] = None  # base64 data URI
 
+class SendMessageRequest(BaseModel):
+    player_name: str
+    type: str = "text"  # "text" | "image"
+    content: str
+
+class DeleteMessageRequest(BaseModel):
+    host_name: str  # must equal game.host_name
+
+class MutePlayerRequest(BaseModel):
+    host_name: str
+    target_player: str
+
+class TypingRequest(BaseModel):
+    player_name: str
+    is_typing: bool = True
+
 # API Routes
 @api_router.get("/")
 async def root():
@@ -227,6 +255,9 @@ async def join_game(code: str, request: JoinGameRequest):
         'players': updated_game.get('players', []),
         'player_order': updated_game.get('player_order', [])
     }, room=code.upper())
+    
+    # System chat message
+    await emit_system_message(code, f"🎉 {request.player_name} joined the game")
     
     return updated_game
 
@@ -486,6 +517,8 @@ async def randomize_numbers(code: str):
         'numbers_left': numbers_left
     }, room=code.upper())
     
+    await emit_system_message(code, "🎲 Numbers have been randomized! The board is locked.")
+    
     return updated_game
 
 @api_router.post("/games/{code}/winner")
@@ -525,6 +558,9 @@ async def set_winner(code: str, request: SetWinnerRequest):
         'player_name': square.get('player_name'),
         'winners': updated_game.get('winners', [])
     }, room=code.upper())
+    
+    winner_name = square.get('player_name') or 'TBD'
+    await emit_system_message(code, f"🏆 Quarter {request.quarter} winner: {winner_name} (square #{request.position + 1})")
     
     return updated_game
 
@@ -819,6 +855,9 @@ async def release_square(code: str, request: ReleaseSquareRequest):
         'reason': 'host_release',
     }, room=code.upper())
     
+    if released_player:
+        await emit_system_message(code, f"🗑️ Host removed pick on square #{request.position + 1} (was {released_player})")
+    
     return updated_game
 
 @api_router.post("/games/{code}/add-player")
@@ -1048,7 +1087,184 @@ async def set_player_style(code: str, request: SetPlayerStyleRequest):
 
     return updated_game
 
-# Socket.IO events
+# ============================================================
+# Chat / Messaging endpoints
+# ============================================================
+
+async def emit_system_message(code: str, text: str):
+    """Helper: create a system message in DB and broadcast it to room."""
+    try:
+        msg = ChatMessage(
+            game_code=code.upper(),
+            player_name="SYSTEM",
+            type="system",
+            content=text,
+        )
+        doc = msg.model_dump()
+        # serialize datetime to ISO string for storage and broadcast
+        doc['timestamp'] = doc['timestamp'].isoformat()
+        await db.chat_messages.insert_one(doc)
+        doc.pop('_id', None)
+        await sio.emit('chat:message', doc, room=code.upper())
+    except Exception as e:
+        logger.error(f"Failed to emit system message: {e}")
+
+@api_router.get("/games/{code}/messages")
+async def get_messages(code: str, limit: int = 100):
+    """Get the most recent chat messages for a game (oldest -> newest order)."""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    # Fetch newest N then reverse to chronological
+    cursor = db.chat_messages.find({"game_code": code.upper()}).sort("timestamp", -1).limit(limit)
+    rows = []
+    async for row in cursor:
+        row.pop('_id', None)
+        # Ensure timestamp is serializable
+        ts = row.get('timestamp')
+        if hasattr(ts, 'isoformat'):
+            row['timestamp'] = ts.isoformat()
+        rows.append(row)
+    rows.reverse()
+    return {"messages": rows, "muted_players": game.get('muted_players', [])}
+
+@api_router.post("/games/{code}/messages")
+async def send_message(code: str, request: SendMessageRequest):
+    """Send a chat message to the game room."""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    # Validate player exists in game (or is host)
+    players = game.get('players', [])
+    host_name = game.get('host_name')
+    if request.player_name not in players and request.player_name != host_name:
+        raise HTTPException(status_code=403, detail="You are not in this game")
+    
+    # Check if player is muted (host is immune)
+    muted = game.get('muted_players', [])
+    if request.player_name in muted and request.player_name != host_name:
+        raise HTTPException(status_code=403, detail="You are muted by the host")
+    
+    # Validate message type
+    if request.type not in ("text", "image"):
+        raise HTTPException(status_code=400, detail="Invalid message type")
+    
+    # Basic content validation
+    if not request.content or not request.content.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    
+    if request.type == "text" and len(request.content) > 2000:
+        raise HTTPException(status_code=400, detail="Message too long (max 2000 chars)")
+    
+    if request.type == "image" and len(request.content) > 2_000_000:  # ~2MB safety
+        raise HTTPException(status_code=400, detail="Image too large")
+    
+    msg = ChatMessage(
+        game_code=code.upper(),
+        player_name=request.player_name,
+        type=request.type,
+        content=request.content,
+    )
+    doc = msg.model_dump()
+    doc['timestamp'] = doc['timestamp'].isoformat()
+    await db.chat_messages.insert_one(doc)
+    doc.pop('_id', None)
+    
+    # Broadcast to room
+    await sio.emit('chat:message', doc, room=code.upper())
+    
+    return doc
+
+@api_router.delete("/games/{code}/messages/{message_id}")
+async def delete_message(code: str, message_id: str, host_name: str):
+    """Host-only: soft-delete a chat message."""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if host_name != game.get('host_name'):
+        raise HTTPException(status_code=403, detail="Only the host can delete messages")
+    
+    result = await db.chat_messages.update_one(
+        {"id": message_id, "game_code": code.upper()},
+        {"$set": {"deleted": True, "deleted_by": host_name, "content": ""}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    await sio.emit('chat:message_deleted', {
+        'id': message_id,
+        'deleted_by': host_name,
+    }, room=code.upper())
+    
+    return {"success": True, "message_id": message_id}
+
+@api_router.post("/games/{code}/mute")
+async def mute_player(code: str, request: MutePlayerRequest):
+    """Host-only: mute a player from sending chat."""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if request.host_name != game.get('host_name'):
+        raise HTTPException(status_code=403, detail="Only the host can mute players")
+    if request.target_player == game.get('host_name'):
+        raise HTTPException(status_code=400, detail="Cannot mute the host")
+    
+    muted = list(game.get('muted_players', []))
+    if request.target_player not in muted:
+        muted.append(request.target_player)
+        await db.games.update_one(
+            {"code": code.upper()},
+            {"$set": {"muted_players": muted}}
+        )
+    
+    await sio.emit('chat:player_muted', {
+        'target_player': request.target_player,
+        'muted_players': muted,
+    }, room=code.upper())
+    
+    # System message
+    await emit_system_message(code, f"🔇 {request.target_player} has been muted by the host")
+    
+    return {"muted_players": muted}
+
+@api_router.post("/games/{code}/unmute")
+async def unmute_player(code: str, request: MutePlayerRequest):
+    """Host-only: unmute a player."""
+    game = await db.games.find_one({"code": code.upper()})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if request.host_name != game.get('host_name'):
+        raise HTTPException(status_code=403, detail="Only the host can unmute players")
+    
+    muted = list(game.get('muted_players', []))
+    if request.target_player in muted:
+        muted = [p for p in muted if p != request.target_player]
+        await db.games.update_one(
+            {"code": code.upper()},
+            {"$set": {"muted_players": muted}}
+        )
+    
+    await sio.emit('chat:player_unmuted', {
+        'target_player': request.target_player,
+        'muted_players': muted,
+    }, room=code.upper())
+    
+    await emit_system_message(code, f"🔊 {request.target_player} has been unmuted")
+    
+    return {"muted_players": muted}
+
+@api_router.post("/games/{code}/typing")
+async def typing_indicator(code: str, request: TypingRequest):
+    """Broadcast typing indicator (not persisted)."""
+    await sio.emit('chat:typing', {
+        'player_name': request.player_name,
+        'is_typing': request.is_typing,
+    }, room=code.upper())
+    return {"ok": True}
+
+# ============================================================
 @sio.event
 async def connect(sid, environ):
     logger.info(f"Client connected: {sid}")

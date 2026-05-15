@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io, Socket } from 'socket.io-client';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import Chat, { ChatMessage } from '../components/Chat';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -166,6 +167,11 @@ export default function GameScreen() {
   const [selectedPattern, setSelectedPattern] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [savingStyle, setSavingStyle] = useState(false);
+
+  // Chat state
+  const [chatVisible, setChatVisible] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   // Zoom controls
   const zoomIn = () => {
@@ -2346,6 +2352,46 @@ export default function GameScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Floating Chat Button (FAB) */}
+      {gameInfo?.playerName && (
+        <TouchableOpacity
+          style={styles.chatFab}
+          onPress={() => setChatVisible(true)}
+          activeOpacity={0.85}
+          accessibilityLabel="Open game chat"
+        >
+          <Ionicons name="chatbubbles" size={26} color="#fff" />
+          {chatUnread > 0 && (
+            <View style={styles.chatBadge}>
+              <Text style={styles.chatBadgeText}>
+                {chatUnread > 99 ? '99+' : chatUnread}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      )}
+
+      {/* In-App Chat Modal */}
+      {gameInfo?.playerName && (
+        <Chat
+          visible={chatVisible}
+          onClose={() => setChatVisible(false)}
+          gameCode={code as string}
+          playerName={gameInfo.playerName}
+          isHost={!!gameInfo.isHost}
+          hostName={game.host_name}
+          players={game.players || []}
+          backendUrl={BACKEND_URL}
+          socket={socket}
+          initialMessages={chatMessages}
+          onUnreadChange={(c: any) => {
+            // c can be a number or a functional updater (from Chat.tsx)
+            setChatUnread(c);
+          }}
+          onMessagesUpdate={(msgs) => setChatMessages(msgs)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -3294,5 +3340,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flex: 1,
     lineHeight: 16,
+  },
+  // Floating chat button (FAB)
+  chatFab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+    zIndex: 100,
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#f44336',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 5,
+    borderWidth: 2,
+    borderColor: '#1a1a2e',
+  },
+  chatBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
 });
