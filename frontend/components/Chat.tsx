@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Socket } from 'socket.io-client';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface ChatMessage {
   id: string;
@@ -71,6 +72,11 @@ export default function Chat({
   onUnreadChange,
   onMessagesUpdate,
 }: ChatProps) {
+  const insets = useSafeAreaInsets();
+  // Minimum bottom padding so Android nav bar / iPhone home indicator never covers the input.
+  // Use the larger of the device's safe-area inset OR a sensible fallback (24).
+  const bottomSafePad = Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 12);
+
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
@@ -464,61 +470,68 @@ export default function Chat({
             </View>
           )}
 
-          {/* Composer */}
-          {amIMuted ? (
-            <View style={styles.mutedBanner}>
-              <Ionicons name="volume-mute" size={18} color="#FFA726" />
-              <Text style={styles.mutedText}>
-                You have been muted by the host
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.composer}>
-              <TouchableOpacity
-                style={styles.composerIconBtn}
-                onPress={() => setShowEmojiPicker((s) => !s)}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              >
-                <Ionicons
-                  name={showEmojiPicker ? 'happy' : 'happy-outline'}
-                  size={24}
-                  color={showEmojiPicker ? '#FFD700' : '#aaa'}
+          {/* Composer + safe-area footer (lifts input above Android nav bar) */}
+          <View style={{ paddingBottom: bottomSafePad }}>
+            {amIMuted ? (
+              <View style={styles.mutedBanner}>
+                <Ionicons name="volume-mute" size={18} color="#FFA726" />
+                <Text style={styles.mutedText}>
+                  You have been muted by the host
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.composer}>
+                <TouchableOpacity
+                  style={styles.composerIconBtn}
+                  onPress={() => setShowEmojiPicker((s) => !s)}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons
+                    name={showEmojiPicker ? 'happy' : 'happy-outline'}
+                    size={24}
+                    color={showEmojiPicker ? '#FFD700' : '#aaa'}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.composerIconBtn}
+                  onPress={sendImageMessage}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  disabled={sending}
+                >
+                  <Ionicons name="image-outline" size={24} color="#aaa" />
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.composerInput}
+                  value={inputText}
+                  onChangeText={onInputChange}
+                  placeholder="Type a message…"
+                  placeholderTextColor="#666"
+                  multiline
+                  maxLength={2000}
+                  onFocus={() => setShowEmojiPicker(false)}
                 />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.composerIconBtn}
-                onPress={sendImageMessage}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                disabled={sending}
-              >
-                <Ionicons name="image-outline" size={24} color="#aaa" />
-              </TouchableOpacity>
-              <TextInput
-                style={styles.composerInput}
-                value={inputText}
-                onChangeText={onInputChange}
-                placeholder="Type a message…"
-                placeholderTextColor="#666"
-                multiline
-                maxLength={2000}
-                onFocus={() => setShowEmojiPicker(false)}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!inputText.trim() || sending) && styles.sendButtonDisabled,
-                ]}
-                onPress={sendTextMessage}
-                disabled={!inputText.trim() || sending}
-              >
-                {sending ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons name="send" size={20} color="#fff" />
-                )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.sendButton,
+                    (!inputText.trim() || sending) && styles.sendButtonDisabled,
+                  ]}
+                  onPress={sendTextMessage}
+                  disabled={!inputText.trim() || sending}
+                >
+                  {sending ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="send" size={20} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+            {/* Subtle inert brand strip — keeps input clear of Android nav buttons */}
+            <View style={styles.brandStrip} pointerEvents="none">
+              <Ionicons name="football" size={11} color="rgba(76,175,80,0.55)" />
+              <Text style={styles.brandStripText}>Sports Squares</Text>
             </View>
-          )}
+          </View>
         </View>
       </KeyboardAvoidingView>
 
@@ -649,6 +662,21 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 13,
     marginTop: 4,
+  },
+  brandStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingTop: 6,
+    paddingBottom: 4,
+  },
+  brandStripText: {
+    color: 'rgba(255,255,255,0.32)',
+    fontSize: 10,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
   // System messages
   systemRow: {
