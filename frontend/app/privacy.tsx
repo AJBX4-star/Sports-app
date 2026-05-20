@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 const APP_NAME = 'Sports Squares';
-const CONTACT_EMAIL = 'support@sportssquares.app';
+const CONTACT_EMAIL = 'sportssquaresapp@yahoo.com';
 const LAST_UPDATED = 'February 2026';
 
 export default function PrivacyPolicyScreen() {
