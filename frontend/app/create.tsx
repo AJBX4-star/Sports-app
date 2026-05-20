@@ -16,7 +16,12 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+// Hardcoded fallback so a published APK never ends up with an empty backend URL
+// if EXPO_PUBLIC_BACKEND_URL isn't baked into the bundle at build time.
+const FALLBACK_BACKEND = 'https://sports-squares-debug.preview.emergentagent.com';
+const BACKEND_URL =
+  (process.env.EXPO_PUBLIC_BACKEND_URL && process.env.EXPO_PUBLIC_BACKEND_URL.trim()) ||
+  FALLBACK_BACKEND;
 
 export default function CreateGameScreen() {
   const router = useRouter();
