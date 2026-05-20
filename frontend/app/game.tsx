@@ -123,6 +123,11 @@ export default function GameScreen() {
   const [gameInfo, setGameInfo] = useState<GameInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState<Socket | null>(null);
+  // Connection status: 'connected' = live socket, 'reconnecting' = trying, 'offline' = polling fallback only
+  const [connStatus, setConnStatus] = useState<'connected' | 'reconnecting' | 'offline'>('reconnecting');
+  // Ref mirror of connStatus so the polling setInterval reads the latest value (avoids stale closure)
+  const connStatusRef = useRef<'connected' | 'reconnecting' | 'offline'>('reconnecting');
+  useEffect(() => { connStatusRef.current = connStatus; }, [connStatus]);
   const [showHostMenu, setShowHostMenu] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [editTeamH, setEditTeamH] = useState('');
@@ -260,11 +265,13 @@ export default function GameScreen() {
       fetchGame();
       connectSocket();
       
-      // Polling fallback for real-time updates
-      // This ensures all players see updates even if WebSocket fails
+      // Polling fallback for real-time updates — only polls when socket is NOT connected.
+      // When socket is healthy, events handle updates. When socket fails, polling takes over.
       const pollInterval = setInterval(() => {
-        fetchGameSilent();
-      }, 3000); // Poll every 3 seconds
+        if (connStatusRef.current !== 'connected') {
+          fetchGameSilent();
+        }
+      }, 3000);
       
       return () => {
         clearInterval(pollInterval);
@@ -315,21 +322,40 @@ export default function GameScreen() {
       transports: ['websocket', 'polling'],
       path: '/socket.io/',
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000, // exponential backoff capped at 10s
+      randomizationFactor: 0.5,
+      timeout: 20000,
     });
 
     newSocket.on('connect', () => {
       console.log('Socket connected, joining room:', code);
       newSocket.emit('join_room', { code: code });
+      setConnStatus('connected');
+      // On (re)connect, refetch full game state to catch any events we missed while disconnected
+      fetchGameSilent();
     });
 
     newSocket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
+      setConnStatus('reconnecting');
     });
 
     newSocket.on('disconnect', (reason) => {
       console.log('Socket disconnected:', reason);
+      setConnStatus('reconnecting');
+    });
+
+    newSocket.on('reconnect_attempt', (attempt) => {
+      console.log('Socket reconnect attempt #', attempt);
+      // After 3 failed attempts, treat as fully offline so polling kicks in harder
+      if (attempt >= 3) setConnStatus('offline');
+    });
+
+    newSocket.on('reconnect', () => {
+      console.log('Socket reconnected');
+      setConnStatus('connected');
     });
 
     newSocket.on('joined_room', (data) => {
@@ -1137,7 +1163,24 @@ export default function GameScreen() {
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.gameCode}>Code: {code}</Text>
+            <View style={styles.codeRow}>
+              <Text style={styles.gameCode}>Code: {code}</Text>
+              <View
+                style={[
+                  styles.connDot,
+                  connStatus === 'connected' && styles.connDotGreen,
+                  connStatus === 'reconnecting' && styles.connDotYellow,
+                  connStatus === 'offline' && styles.connDotRed,
+                ]}
+                accessibilityLabel={
+                  connStatus === 'connected'
+                    ? 'Live connection'
+                    : connStatus === 'reconnecting'
+                    ? 'Reconnecting'
+                    : 'Offline — using sync mode'
+                }
+              />
+            </View>
             <Text style={styles.playerCount}>{game.players.length} player{game.players.length !== 1 ? 's' : ''}</Text>
           </View>
           <View style={styles.headerRight}>
@@ -2547,6 +2590,26 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  codeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  connDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#888',
+  },
+  connDotGreen: {
+    backgroundColor: '#4CAF50',
+  },
+  connDotYellow: {
+    backgroundColor: '#FFC107',
+  },
+  connDotRed: {
+    backgroundColor: '#f44336',
   },
   playerCount: {
     color: '#888',

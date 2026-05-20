@@ -191,15 +191,26 @@ export default function HomeScreen() {
                 <Ionicons name="football" size={20} color="#4CAF50" />
               </View>
 
-              {/* Privacy Policy Link */}
-              <TouchableOpacity
-                onPress={() => router.push('/privacy')}
-                style={styles.privacyLink}
-                hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}
-              >
-                <Ionicons name="shield-checkmark-outline" size={14} color="rgba(255,255,255,0.55)" />
-                <Text style={styles.privacyLinkText}>Privacy Policy</Text>
-              </TouchableOpacity>
+              {/* Privacy Policy + Terms Links */}
+              <View style={styles.legalRow}>
+                <TouchableOpacity
+                  onPress={() => router.push('/privacy')}
+                  style={styles.privacyLink}
+                  hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                >
+                  <Ionicons name="shield-checkmark-outline" size={14} color="rgba(255,255,255,0.55)" />
+                  <Text style={styles.privacyLinkText}>Privacy Policy</Text>
+                </TouchableOpacity>
+                <Text style={styles.legalDivider}>·</Text>
+                <TouchableOpacity
+                  onPress={() => router.push('/terms')}
+                  style={styles.privacyLink}
+                  hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                >
+                  <Ionicons name="document-text-outline" size={14} color="rgba(255,255,255,0.55)" />
+                  <Text style={styles.privacyLinkText}>Terms of Service</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </SafeAreaView>
         </View>
@@ -431,7 +442,6 @@ const styles = StyleSheet.create({
   privacyLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 6,
     marginTop: 12,
     paddingVertical: 8,
@@ -440,6 +450,17 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.55)',
     fontSize: 12,
     textDecorationLine: 'underline',
+  },
+  legalRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  legalDivider: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 12,
+    marginTop: 12,
   },
   // My Games styles
   myGamesButton: {
