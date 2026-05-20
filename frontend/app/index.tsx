@@ -24,10 +24,15 @@ const APP_BUILD =
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Sports themed background image - from environment or fallback
-const HERO_IMAGE =
-  process.env.EXPO_PUBLIC_HERO_IMAGE ||
-  'https://customer-assets.emergentagent.com/job_6e1df73e-25d2-4f8e-bae0-a8029b2b9c4b/artifacts/6l9s6wqc_file_00000000fec8722f8b0dccf0e21824a4.png';
+// Sports themed background image
+// Bundled as a local asset so it's available instantly on native builds (web preview
+// also benefits from no network round-trip). The env var override is kept for easy
+// re-skinning without rebuilding, but defaults to the local file for reliability.
+const LOCAL_HERO = require('../assets/images/hero-bg.jpg');
+const REMOTE_HERO_OVERRIDE = process.env.EXPO_PUBLIC_HERO_IMAGE;
+const HERO_SOURCE = REMOTE_HERO_OVERRIDE
+  ? { uri: REMOTE_HERO_OVERRIDE }
+  : LOCAL_HERO;
 
 interface SavedGame {
   code: string;
@@ -102,7 +107,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <ImageBackground source={{ uri: HERO_IMAGE }} style={styles.heroImage} resizeMode="cover">
+      <ImageBackground source={HERO_SOURCE} style={styles.heroImage} resizeMode="cover">
         <View style={styles.overlay}>
           <SafeAreaView style={styles.safeArea}>
             <ScrollView contentContainerStyle={styles.content}>

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sports Squares",
     "slug": "sports-squares",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "The ultimate multiplayer Sports Squares game — host or join a 10x10 squares pool for any game, customize your squares, chat with players, and pick winners by quarter.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -14,7 +14,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sportssquares.app",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Pick a photo to customize your squares or share in chat",
         "NSCameraUsageDescription": "Take a photo to share in game chat",
@@ -28,7 +28,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.sportssquares.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "READ_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES"
