@@ -13,6 +13,14 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+
+const APP_VERSION =
+  Constants.expoConfig?.version ?? '1.0.0';
+const APP_BUILD =
+  Constants.expoConfig?.android?.versionCode ??
+  Constants.expoConfig?.ios?.buildNumber ??
+  null;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -211,6 +219,11 @@ export default function HomeScreen() {
                   <Text style={styles.privacyLinkText}>Terms of Service</Text>
                 </TouchableOpacity>
               </View>
+
+              {/* App version label (subtle) */}
+              <Text style={styles.versionText}>
+                v{APP_VERSION}{APP_BUILD ? ` (${APP_BUILD})` : ''}
+              </Text>
             </ScrollView>
           </SafeAreaView>
         </View>
@@ -461,6 +474,13 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.35)',
     fontSize: 12,
     marginTop: 12,
+  },
+  versionText: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 6,
+    letterSpacing: 0.3,
   },
   // My Games styles
   myGamesButton: {
