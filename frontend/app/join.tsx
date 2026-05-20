@@ -15,7 +15,12 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+// Hardcoded fallback so a published APK never ends up with an empty backend URL
+// if EXPO_PUBLIC_BACKEND_URL isn't baked into the bundle at build time.
+const FALLBACK_BACKEND = 'https://sports-squares-debug.preview.emergentagent.com';
+const BACKEND_URL =
+  (process.env.EXPO_PUBLIC_BACKEND_URL && process.env.EXPO_PUBLIC_BACKEND_URL.trim()) ||
+  FALLBACK_BACKEND;
 
 export default function JoinGameScreen() {
   const router = useRouter();
@@ -34,8 +39,11 @@ export default function JoinGameScreen() {
     }
 
     setLoading(true);
+    const requestUrl = `${BACKEND_URL}/api/games/${gameCode.toUpperCase()}/join`;
+    let responseStatus: number | string = 'no-response';
+    let responseBody = '';
     try {
-      const response = await fetch(`${BACKEND_URL}/api/games/${gameCode.toUpperCase()}/join`, {
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -45,10 +53,20 @@ export default function JoinGameScreen() {
           player_name: playerName.trim(),
         }),
       });
+      responseStatus = response.status;
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to join game');
+        try {
+          responseBody = await response.text();
+        } catch (_) {
+          responseBody = '(could not read body)';
+        }
+        let detail = responseBody;
+        try {
+          const parsed = JSON.parse(responseBody);
+          detail = parsed.detail || responseBody;
+        } catch (_) {}
+        throw new Error(`HTTP ${response.status}: ${String(detail).slice(0, 200)}`);
       }
 
       const game = await response.json();
@@ -79,7 +97,15 @@ export default function JoinGameScreen() {
       router.replace({ pathname: '/game', params: { code: game.code } });
     } catch (error: any) {
       console.error('Error joining game:', error);
-      Alert.alert('Error', error.message || 'Failed to join game. Please check the code and try again.');
+      const envUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '(empty)';
+      const details = [
+        `URL: ${requestUrl}`,
+        `Status: ${responseStatus}`,
+        `Env: ${envUrl}`,
+        `Error: ${error?.message || String(error)}`,
+        responseBody ? `Body: ${responseBody.slice(0, 200)}` : '',
+      ].filter(Boolean).join('\n');
+      Alert.alert('Join Game Failed (debug)', details);
     } finally {
       setLoading(false);
     }

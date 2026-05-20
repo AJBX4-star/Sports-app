@@ -39,26 +39,36 @@ export default function CreateGameScreen() {
     }
 
     setLoading(true);
+    const requestUrl = `${BACKEND_URL}/api/games`;
+    let responseStatus: number | string = 'no-response';
+    let responseBody = '';
     try {
       const hostId = Math.random().toString(36).substring(7);
-      
-      const response = await fetch(`${BACKEND_URL}/api/games`, {
+      const payload = {
+        host_id: hostId,
+        host_name: hostName.trim(),
+        team_horizontal: teamHorizontal.trim() || 'Team A',
+        team_vertical: teamVertical.trim() || 'Team B',
+        picks_per_turn: parseInt(picksPerTurn) || 1,
+        draft_style: draftStyle,
+      };
+
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          host_id: hostId,
-          host_name: hostName.trim(),
-          team_horizontal: teamHorizontal.trim() || 'Team A',
-          team_vertical: teamVertical.trim() || 'Team B',
-          picks_per_turn: parseInt(picksPerTurn) || 1,
-          draft_style: draftStyle,
-        }),
+        body: JSON.stringify(payload),
       });
+      responseStatus = response.status;
 
       if (!response.ok) {
-        throw new Error('Failed to create game');
+        try {
+          responseBody = await response.text();
+        } catch (_) {
+          responseBody = '(could not read body)';
+        }
+        throw new Error(`HTTP ${response.status}: ${responseBody.slice(0, 200)}`);
       }
 
       const game = await response.json();
@@ -88,9 +98,17 @@ export default function CreateGameScreen() {
       await AsyncStorage.setItem('savedGames', JSON.stringify([newSavedGame, ...filteredGames]));
 
       router.replace({ pathname: '/game', params: { code: game.code } });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating game:', error);
-      Alert.alert('Error', 'Failed to create game. Please try again.');
+      const envUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '(empty)';
+      const details = [
+        `URL: ${requestUrl}`,
+        `Status: ${responseStatus}`,
+        `Env: ${envUrl}`,
+        `Error: ${error?.message || String(error)}`,
+        responseBody ? `Body: ${responseBody.slice(0, 200)}` : '',
+      ].filter(Boolean).join('\n');
+      Alert.alert('Create Game Failed (debug)', details);
     } finally {
       setLoading(false);
     }
